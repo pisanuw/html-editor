@@ -161,4 +161,4 @@ Potential enhancements for the project:
 
 ## License
 
-No license is currently specified for this repository.
+This project is licensed under the MIT License. See the `LICENSE` file for details.
