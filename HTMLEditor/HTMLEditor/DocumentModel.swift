@@ -1,9 +1,10 @@
 import Foundation
 import AppKit
 import UniformTypeIdentifiers
+import Combine
 
 class DocumentModel: ObservableObject {
-    @Published var htmlText: String = Self.defaultHTML
+    @Published var htmlText: String = DocumentModel.defaultHTML
     @Published var fileURL: URL?
     @Published var windowTitle: String = "Untitled"
     @Published var cursorLine: Int = 1

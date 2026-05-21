@@ -72,19 +72,28 @@ struct EditorView: NSViewRepresentable {
         func textDidChange(_ notification: Notification) {
             guard !isEditing, let tv = notification.object as? NSTextView else { return }
             isEditing = true
-            parent.text = tv.string
             if let storage = tv.textStorage {
                 let sel = tv.selectedRange()
                 HTMLSyntaxHighlighter.highlight(storage)
                 tv.setSelectedRange(sel)
             }
+            let newText = tv.string
             isEditing = false
+            // Defer @Binding update to avoid publishing during a SwiftUI view update.
+            DispatchQueue.main.async { [weak self] in
+                self?.parent.text = newText
+            }
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
             let loc = tv.selectedRange().location
-            parent.document.updateCursor(in: tv.string, at: loc)
+            let str = tv.string
+            // Defer to avoid publishing during the view-update cycle that
+            // triggered setSelectedRange (e.g. from updateNSView).
+            DispatchQueue.main.async { [weak self] in
+                self?.parent.document.updateCursor(in: str, at: loc)
+            }
         }
     }
 }

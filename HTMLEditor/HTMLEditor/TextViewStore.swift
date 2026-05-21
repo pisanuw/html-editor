@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 // Holds a weak reference to the live NSTextView so toolbar actions can
 // insert/wrap text at the current cursor position.

@@ -8,7 +8,10 @@ struct PreviewView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let webView = WKWebView()
-        webView.setValue(true, forKey: "drawsTransparentBackground")
+        // Force light appearance so HTML renders on a white background regardless
+        // of the system's dark/light mode setting.
+        webView.appearance = NSAppearance(named: .aqua)
+        webView.underPageBackgroundColor = .white
         context.coordinator.webView = webView
         context.coordinator.load(html)
         return webView
