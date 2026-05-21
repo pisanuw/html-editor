@@ -6,6 +6,7 @@ struct HtmlEditorApp: App {
     @StateObject private var textViewStore = TextViewStore()
     @StateObject private var findState = FindState()
     @StateObject private var previewStore = PreviewStore()
+    @StateObject private var snippetStore = SnippetStore()
 
     var body: some Scene {
         WindowGroup {
@@ -14,6 +15,7 @@ struct HtmlEditorApp: App {
                 .environmentObject(textViewStore)
                 .environmentObject(findState)
                 .environmentObject(previewStore)
+                .environmentObject(snippetStore)
                 .frame(minWidth: 900, minHeight: 600)
         }
         .commands {
@@ -49,6 +51,32 @@ struct HtmlEditorApp: App {
                     .keyboardShortcut("f")
                 Button("Reformat Document") { reformat() }
                     .keyboardShortcut("f", modifiers: [.command, .option])
+            }
+
+            // Editing features: Emmet, completion, multi-cursor, snippets.
+            CommandMenu("Editor") {
+                Button("Expand Abbreviation") { textViewStore.expandEmmet() }
+                    .keyboardShortcut("e", modifiers: .control)
+                Button("Autocomplete Tag / Attribute") { textViewStore.triggerCompletion() }
+                Divider()
+                Button("Rename Matching Tag") { textViewStore.renameTagAtCaret() }
+                    .keyboardShortcut("r", modifiers: [.command, .control])
+                Button("Add Next Occurrence") { textViewStore.addNextOccurrence() }
+                    .keyboardShortcut("d", modifiers: .command)
+                Button("Split Selection into Lines") { textViewStore.splitSelectionIntoLines() }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+                Button("Column Selection") { textViewStore.columnSelectFromSelection() }
+                    .keyboardShortcut("l", modifiers: [.command, .control])
+                Divider()
+                Menu("Snippets") {
+                    ForEach(snippetStore.library.snippets) { snippet in
+                        Button(snippet.name.isEmpty ? snippet.trigger : snippet.name) {
+                            textViewStore.insertSnippet(snippet.body)
+                        }
+                    }
+                    Divider()
+                    Button("Manage Snippets…") { snippetStore.showingManager = true }
+                }
             }
         }
     }

@@ -7,6 +7,7 @@ struct ContentView: View {
     @EnvironmentObject var textViewStore: TextViewStore
     @EnvironmentObject var findState: FindState
     @EnvironmentObject var previewStore: PreviewStore
+    @EnvironmentObject var snippetStore: SnippetStore
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,6 +24,9 @@ struct ContentView: View {
                 .id(workspace.activeID)
         }
         .toolbar { toolbarContent }
+        .sheet(isPresented: $snippetStore.showingManager) {
+            SnippetsView().environmentObject(snippetStore)
+        }
     }
 
     // MARK: - Toolbar

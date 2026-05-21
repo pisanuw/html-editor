@@ -91,6 +91,7 @@ struct EditorView: NSViewRepresentable {
     class Coordinator: NSObject, NSTextViewDelegate {
         var parent: EditorView
         var isEditing = false
+        var isAutoClosing = false
         weak var ruler: LineNumberRulerView?
 
         init(_ parent: EditorView) { self.parent = parent }
@@ -126,8 +127,69 @@ struct EditorView: NSViewRepresentable {
             let selection = tv.selectedRange()
             let str = tv.string
             parent.document.savedSelection = selection
+            updateMatchHighlight(tv)
             DispatchQueue.main.async { [weak self] in
                 self?.parent.document.updateCursor(in: str, at: selection.location)
+            }
+        }
+
+        /// Highlight the matching tag-name pair or bracket pair around the caret.
+        /// Uses temporary attributes, which are display-only and do not disturb
+        /// the syntax-highlight colors stored on the text.
+        private func updateMatchHighlight(_ tv: NSTextView) {
+            guard let lm = tv.layoutManager else { return }
+            let full = NSRange(location: 0, length: (tv.string as NSString).length)
+            lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
+
+            let caret = tv.selectedRange()
+            guard caret.length == 0 else { return }
+            let color = NSColor.systemTeal.withAlphaComponent(0.30)
+
+            if let (a, b) = TagEditing.matchingTagNameRanges(in: tv.string, caret: caret.location) {
+                lm.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: a)
+                lm.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: b)
+            } else if let (open, close) = CodeStructure.matchingBracket(in: tv.string, caret: caret.location) {
+                lm.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: open)
+                lm.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: close)
+            }
+        }
+
+        /// Auto-close a tag when the user types the `>` that completes it.
+        func textView(_ textView: NSTextView,
+                      shouldChangeTextIn affectedCharRange: NSRange,
+                      replacementString: String?) -> Bool {
+            guard !isAutoClosing, replacementString == ">" else { return true }
+
+            let ns = textView.string as NSString
+            let afterInsert = ns.replacingCharacters(in: affectedCharRange, with: ">")
+            let caretAfter = affectedCharRange.location + 1
+            guard let result = TagEditing.autoClose(in: afterInsert, caretAfterBracket: caretAfter) else { return true }
+
+            isAutoClosing = true
+            defer { isAutoClosing = false }
+            let insertion = ">" + result.closing
+            if textView.shouldChangeText(in: affectedCharRange, replacementString: insertion) {
+                textView.replaceCharacters(in: affectedCharRange, with: insertion)
+                textView.didChangeText()
+                textView.setSelectedRange(NSRange(location: affectedCharRange.location + 1, length: 0))
+            }
+            return false
+        }
+
+        /// HTML tag / attribute completions for the current caret context.
+        func textView(_ textView: NSTextView,
+                      completions words: [String],
+                      forPartialWordRange charRange: NSRange,
+                      indexOfSelectedItem index: UnsafeMutablePointer<Int>?) -> [String] {
+            switch HTMLCompletion.context(in: textView.string, caret: textView.selectedRange().location) {
+            case .tagName(let prefix, _):
+                let hits = HTMLCompletion.tagCompletions(prefix: prefix)
+                return hits.isEmpty ? words : hits
+            case .attributeName(let prefix, _):
+                let hits = HTMLCompletion.attributeCompletions(prefix: prefix)
+                return hits.isEmpty ? words : hits
+            case .none:
+                return words
             }
         }
 

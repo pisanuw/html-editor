@@ -56,6 +56,24 @@ preview in a single split-view window.
   - Minified HTML
   - PDF (rendered from the live preview)
 
+- **Editing intelligence**
+  - **Emmet abbreviation expansion** (`⌃E`): turn `ul>li.item$*3` or
+    `nav>ul>li*2>a` into fully indented markup, expanded in place
+  - **Auto-close tags**: typing the `>` of an opening tag inserts its matching
+    close and parks the caret between them (skips void and self-closing tags)
+  - **Linked tag rename** (`⌃⌘R`): selects an opening tag's name and its
+    matching close together, so typing renames both at once
+  - **Multiple cursors**: add the next occurrence of the selection (`⌘D`), or
+    split a selection into one caret per line (`⇧⌘L`)
+  - **Column (block) selection** (`⌃⌘L`): turn a selection into a vertical
+    block of selections across the spanned lines
+  - **Tag & attribute autocompletion**: HTML tag and attribute names complete
+    from the caret context (trigger from the Editor menu, or `⌥⎋`)
+  - **Bracket & tag-pair match highlighting**: the matching `()[]{}` or the
+    matching open/close tag is highlighted as the caret moves
+  - **Editable snippet library**: insert reusable snippets from the Editor menu
+    and manage them (add / edit / delete) in a sheet; persisted across launches
+
 - **Toolbar shortcuts for common markup**
   - Headings `H1`–`H3`; inline bold, italic, code; link, image, lists, paragraph
   - Format, Find, and Export actions
@@ -91,13 +109,21 @@ html-editor/
 │       ├── PreviewView.swift           # WKWebView wrapper (debounced preview)
 │       ├── ExportActions.swift         # Save panels + PDF rendering for export
 │       ├── TextViewStore.swift         # Bridge from UI actions to the live text view
+│       ├── SnippetStore.swift          # UserDefaults-backed snippet persistence
+│       ├── SnippetsView.swift          # Snippet management sheet
 │       └── Core/                       # Pure, Foundation-only, unit-tested logic
 │           ├── SyntaxTokenizer.swift   # HTML/CSS/JS tokenizer
 │           ├── TextEditingOps.swift    # Tab/indent/newline transforms
 │           ├── FindEngine.swift        # Search / replace
 │           ├── HTMLFormatter.swift     # Prettify
 │           ├── HTMLExporter.swift      # Minify / standalone / filename
-│           └── TextMetrics.swift       # Line/column math
+│           ├── TextMetrics.swift       # Line/column math
+│           ├── EmmetExpander.swift     # Emmet abbreviation → HTML
+│           ├── TagEditing.swift        # Auto-close + matching-tag ranges
+│           ├── MultiCursor.swift       # Next-occurrence / split / column ranges
+│           ├── HTMLCompletion.swift    # Tag/attribute completion context
+│           ├── CodeStructure.swift     # Bracket matching + fold regions
+│           └── Snippet.swift           # Snippet model + library codec
 └── Tests/HTMLEditorCoreTests/          # XCTest suite for everything in Core/
 ```
 
@@ -145,6 +171,12 @@ Or open `Package.swift` in Xcode and press **⌘U**.
 | Find & replace    | `⌘F`           |
 | Format / prettify | `⌥⌘F`          |
 | Indent / outdent  | `Tab` / `⇧Tab` |
+| Expand abbreviation | `⌃E`         |
+| Rename matching tag | `⌃⌘R`        |
+| Add next occurrence | `⌘D`         |
+| Split into lines  | `⇧⌘L`          |
+| Column selection  | `⌃⌘L`          |
+| Autocomplete      | `⌥⎋` / Editor menu |
 
 ## Notes & Caveats
 
@@ -166,12 +198,9 @@ Ideas for where the editor could go next, roughly grouped by area. Contributions
 are welcome.
 
 **Editing**
-- Auto-close tags and rename a tag and its matching pair together
-- Bracket / tag-pair match highlighting and code folding
-- Multiple cursors and column (block) selection
-- Emmet-style abbreviation expansion (`ul>li*3` → list markup)
-- Tag and attribute autocompletion
-- A user-editable snippet library beyond the fixed toolbar buttons
+- Code folding: collapse multi-line tag regions from the gutter. The foldable
+  regions are already detected (`CodeStructure.foldableRegions`); the remaining
+  work is the gutter affordance and glyph hiding in the text view.
 
 **Search**
 - Find across all open tabs, with a results list
