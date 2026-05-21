@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Top-level layout: the tab strip, an optional find bar, and the editor /
 /// preview pane for the active document.
@@ -26,6 +27,17 @@ struct ContentView: View {
         .toolbar { toolbarContent }
         .sheet(isPresented: $snippetStore.showingManager) {
             SnippetsView().environmentObject(snippetStore)
+        }
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            for provider in providers {
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                    guard let url else { return }
+                    let ext = url.pathExtension.lowercased()
+                    guard ext == "html" || ext == "htm" else { return }
+                    DispatchQueue.main.async { workspace.open(url: url) }
+                }
+            }
+            return true
         }
     }
 
@@ -130,6 +142,20 @@ private struct DocumentPane: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if document.externalChangePending {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    Text("This file changed on disk.")
+                    Spacer()
+                    Button("Reload") { document.reloadFromDisk() }
+                    Button("Ignore") { document.ignoreExternalChange() }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color(NSColor.windowBackgroundColor))
+                .overlay(Divider(), alignment: .bottom)
+            }
             HSplitView {
                 EditorView(document: document)
                     .frame(minWidth: 300)

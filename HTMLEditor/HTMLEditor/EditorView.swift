@@ -1,51 +1,35 @@
 import SwiftUI
 import AppKit
 
-/// The code editor for one document. Recreated per active tab (keyed by the
-/// document id in `ContentView`), so its `NSTextView` always reflects the active
-/// document. Restores the document's saved selection on appear and records it as
-/// the caret moves, so switching tabs keeps each document's cursor position.
+/// The code editor for one document. The underlying `NSScrollView`/`NSTextView`
+/// is cached per document id (see `EditorCache`), so switching tabs reuses the
+/// same text view — preserving its undo stack and selection — instead of
+/// rebuilding it. Font, indent width, and colors follow the app settings.
 struct EditorView: NSViewRepresentable {
     @ObservedObject var document: DocumentModel
     @EnvironmentObject var textViewStore: TextViewStore
+    @EnvironmentObject var settingsStore: AppSettingsStore
+    @EnvironmentObject var editorCache: EditorCache
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let textView = makeTextView(coordinator: context.coordinator)
-        textView.string = document.htmlText
-        applyHighlight(to: textView)
-        textViewStore.textView = textView
+        context.coordinator.parent = self
 
-        let scrollView = NSScrollView()
-        scrollView.documentView = textView
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.borderType = .noBorder
-
-        // Line-number gutter.
-        let ruler = LineNumberRulerView(textView: textView)
-        scrollView.verticalRulerView = ruler
-        scrollView.hasVerticalRuler = true
-        scrollView.rulersVisible = true
-        context.coordinator.ruler = ruler
-
-        // Redraw line numbers while scrolling.
-        scrollView.contentView.postsBoundsChangedNotifications = true
-        context.coordinator.observeScrolling(of: scrollView.contentView)
-
-        // Restore this document's last selection.
-        if let saved = document.savedSelection {
-            let clamped = clamp(saved, to: textView.string)
-            textView.setSelectedRange(clamped)
-            DispatchQueue.main.async { textView.scrollRangeToVisible(clamped) }
+        // Reuse a cached editor for this document if we have one.
+        if let cached = editorCache.scrollView(for: document.id),
+           let textView = cached.documentView as? NSTextView {
+            reconfigure(cached, textView: textView, coordinator: context.coordinator)
+            return cached
         }
 
+        let scrollView = buildScrollView(coordinator: context.coordinator)
+        editorCache.store(scrollView, for: document.id)
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        context.coordinator.parent = self
         guard let textView = scrollView.documentView as? NSTextView else { return }
         textViewStore.textView = textView
         guard !context.coordinator.isEditing, textView.string != document.htmlText else { return }
@@ -54,6 +38,60 @@ struct EditorView: NSViewRepresentable {
         applyHighlight(to: textView)
         textView.setSelectedRange(clamp(sel, to: document.htmlText))
         context.coordinator.ruler?.refresh()
+    }
+
+    // MARK: - Building / reconfiguring
+
+    private func buildScrollView(coordinator: Coordinator) -> NSScrollView {
+        let textView = makeTextView(coordinator: coordinator)
+        textView.string = document.htmlText
+        applyHighlight(to: textView)
+        textViewStore.textView = textView
+        coordinator.textView = textView
+
+        let scrollView = NSScrollView()
+        scrollView.documentView = textView
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+
+        let ruler = LineNumberRulerView(textView: textView)
+        scrollView.verticalRulerView = ruler
+        scrollView.hasVerticalRuler = true
+        scrollView.rulersVisible = true
+        coordinator.ruler = ruler
+
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        coordinator.observeScrolling(of: scrollView.contentView)
+
+        if let saved = document.savedSelection {
+            let clamped = clamp(saved, to: textView.string)
+            textView.setSelectedRange(clamped)
+            DispatchQueue.main.async { textView.scrollRangeToVisible(clamped) }
+        }
+        return scrollView
+    }
+
+    private func reconfigure(_ scrollView: NSScrollView, textView: NSTextView, coordinator: Coordinator) {
+        textView.delegate = coordinator
+        coordinator.textView = textView
+        textViewStore.textView = textView
+        if let ruler = scrollView.verticalRulerView as? LineNumberRulerView {
+            coordinator.ruler = ruler
+        }
+        coordinator.observeScrolling(of: scrollView.contentView)
+        coordinator.applySettings()
+
+        // If the buffer diverged from the view while cached (e.g. external
+        // reload), resync the text (this resets undo for that document only).
+        if textView.string != document.htmlText {
+            let sel = textView.selectedRange()
+            textView.string = document.htmlText
+            applyHighlight(to: textView)
+            textView.setSelectedRange(clamp(sel, to: document.htmlText))
+        }
+        coordinator.ruler?.refresh()
     }
 
     // MARK: - Helpers
@@ -74,7 +112,7 @@ struct EditorView: NSViewRepresentable {
         textView.isAutomaticDashSubstitutionEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
         textView.isGrammarCheckingEnabled = false
-        textView.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        textView.font = .monospacedSystemFont(ofSize: CGFloat(settingsStore.settings.fontSize), weight: .regular)
         textView.textContainerInset = NSSize(width: 6, height: 8)
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = coordinator
@@ -93,16 +131,41 @@ struct EditorView: NSViewRepresentable {
         var isEditing = false
         var isAutoClosing = false
         weak var ruler: LineNumberRulerView?
+        weak var textView: NSTextView?
+        private var observers: [NSObjectProtocol] = []
 
-        init(_ parent: EditorView) { self.parent = parent }
+        init(_ parent: EditorView) {
+            self.parent = parent
+            super.init()
+            let token = NotificationCenter.default.addObserver(
+                forName: .editorSettingsChanged, object: nil, queue: .main) { [weak self] _ in
+                self?.applySettings()
+            }
+            observers.append(token)
+        }
+
+        deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
+
+        /// Apply the current font size and re-highlight with the active theme.
+        func applySettings() {
+            guard let tv = textView else { return }
+            tv.font = .monospacedSystemFont(ofSize: CGFloat(parent.settingsStore.settings.fontSize), weight: .regular)
+            if let storage = tv.textStorage {
+                let sel = tv.selectedRange()
+                HTMLSyntaxHighlighter.highlight(storage)
+                tv.setSelectedRange(sel)
+            }
+            ruler?.refresh()
+        }
 
         func observeScrolling(of clipView: NSClipView) {
-            NotificationCenter.default.addObserver(
+            let token = NotificationCenter.default.addObserver(
                 forName: NSView.boundsDidChangeNotification,
                 object: clipView,
                 queue: .main) { [weak self] _ in
                 self?.ruler?.refresh()
             }
+            observers.append(token)
         }
 
         func textDidChange(_ notification: Notification) {
@@ -116,7 +179,6 @@ struct EditorView: NSViewRepresentable {
             let newText = tv.string
             isEditing = false
             ruler?.refresh()
-            // Defer @Published update to avoid publishing during a SwiftUI update.
             DispatchQueue.main.async { [weak self] in
                 self?.parent.document.htmlText = newText
             }
@@ -134,8 +196,6 @@ struct EditorView: NSViewRepresentable {
         }
 
         /// Highlight the matching tag-name pair or bracket pair around the caret.
-        /// Uses temporary attributes, which are display-only and do not disturb
-        /// the syntax-highlight colors stored on the text.
         private func updateMatchHighlight(_ tv: NSTextView) {
             guard let lm = tv.layoutManager else { return }
             let full = NSRange(location: 0, length: (tv.string as NSString).length)
@@ -159,7 +219,6 @@ struct EditorView: NSViewRepresentable {
                       shouldChangeTextIn affectedCharRange: NSRange,
                       replacementString: String?) -> Bool {
             guard !isAutoClosing, replacementString == ">" else { return true }
-
             let ns = textView.string as NSString
             let afterInsert = ns.replacingCharacters(in: affectedCharRange, with: ">")
             let caretAfter = affectedCharRange.location + 1
@@ -193,30 +252,32 @@ struct EditorView: NSViewRepresentable {
             }
         }
 
-        // Intercept Tab / Shift-Tab / Return for smart indentation.
+        // Intercept Tab / Shift-Tab / Return for smart, localized indentation.
         func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             let selection = textView.selectedRange()
+            let iw = parent.settingsStore.settings.sanitized.indentWidth
             switch commandSelector {
             case #selector(NSResponder.insertTab(_:)):
-                apply(TextEditingOps.insertTab(in: textView.string, selection: selection), to: textView)
+                applyLocal(TextEditingOps.tabEdit(in: textView.string, selection: selection, indentWidth: iw), to: textView)
                 return true
             case #selector(NSResponder.insertBacktab(_:)):
-                apply(TextEditingOps.outdentLines(in: textView.string, selection: selection), to: textView)
+                applyLocal(TextEditingOps.outdentEdit(in: textView.string, selection: selection, indentWidth: iw), to: textView)
                 return true
             case #selector(NSResponder.insertNewline(_:)):
-                apply(TextEditingOps.insertNewline(in: textView.string, selection: selection), to: textView)
+                applyLocal(TextEditingOps.newlineEdit(in: textView.string, selection: selection, indentWidth: iw), to: textView)
                 return true
             default:
                 return false
             }
         }
 
-        private func apply(_ result: TextEditingOps.EditResult, to tv: NSTextView) {
-            let whole = NSRange(location: 0, length: (tv.string as NSString).length)
-            guard tv.shouldChangeText(in: whole, replacementString: result.text) else { return }
-            tv.replaceCharacters(in: whole, with: result.text)
+        /// Apply a localized edit (touches only the affected range, so undo is
+        /// tighter and large documents aren't rewritten wholesale).
+        private func applyLocal(_ edit: TextEditingOps.RangeEdit, to tv: NSTextView) {
+            guard tv.shouldChangeText(in: edit.range, replacementString: edit.replacement) else { return }
+            tv.replaceCharacters(in: edit.range, with: edit.replacement)
             tv.didChangeText()
-            tv.setSelectedRange(result.selection)
+            tv.setSelectedRange(edit.selection)
         }
     }
 }

@@ -1,71 +1,52 @@
 import AppKit
 
-/// Maps semantic ``TokenType`` values to editor colors. Colors are *dynamic*:
-/// they resolve differently in light and dark mode, so syntax highlighting
-/// stays legible whichever appearance the user runs.
+/// Maps semantic ``TokenType`` values to editor colors using the currently
+/// selected ``ThemePalette``. Colors are *dynamic*: each resolves differently
+/// in light and dark mode, so syntax highlighting stays legible in either
+/// appearance. Set ``current`` to switch themes; the highlighter then re-runs.
 enum EditorTheme {
 
+    /// The active palette. Defaults to the built-in "Default" theme; the
+    /// settings store updates it when the user picks another theme.
+    static var current: ThemePalette = ThemeLibrary.defaultTheme
+
     /// The default text color for un-tokenized source.
-    static var foreground: NSColor { .labelColor }
+    static var foreground: NSColor { color(current.foreground) }
 
     static func color(for type: TokenType) -> NSColor {
         switch type {
         case .doctype:      return .secondaryLabelColor
-        case .comment:      return comment
-        case .tag:          return tag
-        case .attribute:    return attribute
-        case .string:       return string
+        case .comment:      return color(current.comment)
+        case .tag:          return color(current.tag)
+        case .attribute:    return color(current.attribute)
+        case .string:       return color(current.string)
 
-        case .cssSelector:  return tag
-        case .cssProperty:  return attribute
-        case .cssValue:     return value
-        case .cssComment:   return comment
+        case .cssSelector:  return color(current.tag)
+        case .cssProperty:  return color(current.attribute)
+        case .cssValue:     return color(current.value)
+        case .cssComment:   return color(current.comment)
 
-        case .jsKeyword:    return keyword
-        case .jsString:     return string
-        case .jsComment:    return comment
-        case .jsNumber:     return number
+        case .jsKeyword:    return color(current.keyword)
+        case .jsString:     return color(current.string)
+        case .jsComment:    return color(current.comment)
+        case .jsNumber:     return color(current.number)
         }
     }
 
-    // MARK: - Palette (light / dark pairs)
+    // MARK: - Hex → dynamic NSColor
 
-    private static let tag = dynamic(
-        light: NSColor(srgbRed: 0.00, green: 0.42, blue: 0.78, alpha: 1),   // blue
-        dark:  NSColor(srgbRed: 0.40, green: 0.74, blue: 1.00, alpha: 1))
-
-    private static let attribute = dynamic(
-        light: NSColor(srgbRed: 0.55, green: 0.15, blue: 0.75, alpha: 1),   // purple
-        dark:  NSColor(srgbRed: 0.82, green: 0.62, blue: 1.00, alpha: 1))
-
-    private static let string = dynamic(
-        light: NSColor(srgbRed: 0.78, green: 0.18, blue: 0.18, alpha: 1),   // red
-        dark:  NSColor(srgbRed: 0.98, green: 0.55, blue: 0.49, alpha: 1))
-
-    private static let comment = dynamic(
-        light: NSColor(srgbRed: 0.38, green: 0.52, blue: 0.38, alpha: 1),   // muted green
-        dark:  NSColor(srgbRed: 0.55, green: 0.70, blue: 0.55, alpha: 1))
-
-    private static let keyword = dynamic(
-        light: NSColor(srgbRed: 0.66, green: 0.20, blue: 0.50, alpha: 1),   // magenta
-        dark:  NSColor(srgbRed: 0.95, green: 0.55, blue: 0.80, alpha: 1))
-
-    private static let value = dynamic(
-        light: NSColor(srgbRed: 0.15, green: 0.45, blue: 0.55, alpha: 1),   // teal
-        dark:  NSColor(srgbRed: 0.45, green: 0.82, blue: 0.92, alpha: 1))
-
-    private static let number = dynamic(
-        light: NSColor(srgbRed: 0.60, green: 0.40, blue: 0.00, alpha: 1),   // amber
-        dark:  NSColor(srgbRed: 0.90, green: 0.74, blue: 0.40, alpha: 1))
-
-    // MARK: - Dynamic color helper
-
-    /// Builds an `NSColor` that picks `light` or `dark` based on the appearance
-    /// it is drawn with.
-    private static func dynamic(light: NSColor, dark: NSColor) -> NSColor {
-        NSColor(name: nil) { appearance in
-            let match = appearance.bestMatch(from: [.aqua, .darkAqua])
-            return match == .darkAqua ? dark : light
+    /// Build an `NSColor` that picks the palette's light or dark hex based on
+    /// the appearance it is drawn with.
+    private static func color(_ themeColor: ThemeColor) -> NSColor {
+        let light = nsColor(fromHex: themeColor.light) ?? .labelColor
+        let dark = nsColor(fromHex: themeColor.dark) ?? .labelColor
+        return NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
         }
+    }
+
+    private static func nsColor(fromHex hex: String) -> NSColor? {
+        guard let rgb = ThemePalette.rgb(fromHex: hex) else { return nil }
+        return NSColor(srgbRed: CGFloat(rgb.red), green: CGFloat(rgb.green), blue: CGFloat(rgb.blue), alpha: 1)
     }
 }

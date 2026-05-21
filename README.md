@@ -51,10 +51,21 @@ preview in a single split-view window.
   - JavaScript (inside `<script>`): keywords, strings, numbers, comments
   - Colors are dynamic and stay legible in both light and dark mode
 
+- **Documents & sessions**
+  - Restores the previously open tabs (saved files) on relaunch
+  - Recent Files menu (File ▸ Open Recent) and drag-and-drop `.html` to open
+  - Watches each open file on disk and offers to reload when it changes
+    externally (the editor's own saves don't trigger the prompt)
+
 - **Export options**
   - Standalone HTML (wraps a fragment in a complete document when needed)
   - Minified HTML
-  - PDF (rendered from the live preview)
+  - Markdown (headings, emphasis, links, images, lists, code, blockquotes)
+  - PDF and PNG (rendered from the live preview)
+
+- **Customization**
+  - Settings panel (`⌘,`) for indent width, editor font size, and theme
+  - Pluggable color themes (Default, Midnight, Sepia), each light/dark aware
 
 - **Editing intelligence**
   - **Emmet abbreviation expansion** (`⌃E`): turn `ul>li.item$*3` or
@@ -73,6 +84,11 @@ preview in a single split-view window.
     matching open/close tag is highlighted as the caret moves
   - **Editable snippet library**: insert reusable snippets from the Editor menu
     and manage them (add / edit / delete) in a sheet; persisted across launches
+
+- **Performance**
+  - Tab / Shift-Tab / Return apply *localized* edits (only the affected lines
+    change) rather than rewriting the whole document
+  - Per-tab undo: each tab keeps its own undo stack across tab switches
 
 - **Toolbar shortcuts for common markup**
   - Headings `H1`–`H3`; inline bold, italic, code; link, image, lists, paragraph
@@ -96,33 +112,41 @@ html-editor/
 ├── HTMLEditor/
 │   ├── HTMLEditor.xcodeproj
 │   └── HTMLEditor/
-│       ├── HtmlEditorApp.swift         # App entry point, menu commands
-│       ├── ContentView.swift           # Window layout, toolbar, export actions
-│       ├── Workspace.swift             # Open tabs + active-tab tracking
-│       ├── DocumentModel.swift         # Per-document text, file I/O, cursor
+│       ├── HtmlEditorApp.swift         # App entry point, menu commands, Settings scene
+│       ├── ContentView.swift           # Window layout, toolbar, drag-and-drop, reload banner
+│       ├── Workspace.swift             # Open tabs, session restore, recent files
+│       ├── DocumentModel.swift         # Per-document text, file I/O, cursor, disk watch
 │       ├── TabBarView.swift            # Tab strip
 │       ├── FindBar.swift               # Find/replace UI + state
-│       ├── EditorView.swift            # NSTextView wrapper (editing, indent keys)
+│       ├── EditorView.swift            # NSTextView wrapper (cached per tab; localized edits)
+│       ├── EditorCache.swift           # Reuses each tab's text view (per-tab undo)
+│       ├── FileWatcher.swift           # Dispatch-source file-change watcher
 │       ├── LineNumberRulerView.swift   # Line-number gutter
 │       ├── HTMLSyntaxHighlighter.swift # Maps tokens → text attributes
-│       ├── EditorTheme.swift           # Light/dark color palette
+│       ├── EditorTheme.swift           # Resolves the active palette to dynamic colors
+│       ├── AppSettingsStore.swift      # Persists EditorSettings; pushes the active theme
+│       ├── SettingsView.swift          # Settings panel (indent, font, theme)
 │       ├── PreviewView.swift           # WKWebView wrapper (debounced preview)
-│       ├── ExportActions.swift         # Save panels + PDF rendering for export
+│       ├── ExportActions.swift         # Save panels; PDF / PNG / Markdown export
 │       ├── TextViewStore.swift         # Bridge from UI actions to the live text view
 │       ├── SnippetStore.swift          # UserDefaults-backed snippet persistence
 │       ├── SnippetsView.swift          # Snippet management sheet
 │       └── Core/                       # Pure, Foundation-only, unit-tested logic
 │           ├── SyntaxTokenizer.swift   # HTML/CSS/JS tokenizer
-│           ├── TextEditingOps.swift    # Tab/indent/newline transforms
+│           ├── TextEditingOps.swift    # Tab/indent/newline transforms (+ localized RangeEdit)
 │           ├── FindEngine.swift        # Search / replace
 │           ├── HTMLFormatter.swift     # Prettify
 │           ├── HTMLExporter.swift      # Minify / standalone / filename
+│           ├── HTMLToMarkdown.swift    # HTML → Markdown conversion
 │           ├── TextMetrics.swift       # Line/column math
 │           ├── EmmetExpander.swift     # Emmet abbreviation → HTML
 │           ├── TagEditing.swift        # Auto-close + matching-tag ranges
 │           ├── MultiCursor.swift       # Next-occurrence / split / column ranges
 │           ├── HTMLCompletion.swift    # Tag/attribute completion context
 │           ├── CodeStructure.swift     # Bracket matching + fold regions
+│           ├── EditorSettings.swift    # Indent / font / theme settings model
+│           ├── ThemePalette.swift      # Named color palettes + hex parsing
+│           ├── SessionState.swift      # Open-tab session + recent-files models
 │           └── Snippet.swift           # Snippet model + library codec
 └── Tests/HTMLEditorCoreTests/          # XCTest suite for everything in Core/
 ```
@@ -170,6 +194,7 @@ Or open `Package.swift` in Xcode and press **⌘U**.
 | Save As           | `⇧⌘S`          |
 | Find & replace    | `⌘F`           |
 | Format / prettify | `⌥⌘F`          |
+| Settings          | `⌘,`           |
 | Indent / outdent  | `Tab` / `⇧Tab` |
 | Expand abbreviation | `⌃E`         |
 | Rename matching tag | `⌃⌘R`        |
@@ -180,15 +205,19 @@ Or open `Package.swift` in Xcode and press **⌘U**.
 
 ## Notes & Caveats
 
-- **Indent, Return, and Format** apply their change by replacing the whole
-  document in a single undoable edit. This keeps the implementation simple and
-  fully undoable; for very large documents the rewrite is heavier than a
-  localized edit.
-- **Undo history is per text view.** Switching tabs recreates the editor for the
-  newly active document, so the undo stack does not carry across a tab switch
-  (cursor and selection are preserved).
+- **Indent and Return apply localized edits**, replacing only the affected line
+  range rather than the whole document, so editing stays cheap in large files.
+  (Format / prettify still rewrites the whole document in one undoable edit,
+  since reformatting is inherently document-wide.)
+- **Undo history is per tab.** Each tab's text view is cached and reused, so its
+  undo stack (and selection) survive switching away and back. Reloading a file
+  from disk resets that document's undo.
+- **External-change watching** compares on-disk content to the buffer, so the
+  editor's own saves never trigger the reload banner.
 - **Syntax highlighting is tokenizer-based**, not a full parser. It handles the
   common cases (including embedded CSS/JS) well and is intentionally lightweight.
+- **HTML→Markdown conversion** targets clean, editor-produced markup; unusual or
+  deeply nested arbitrary web HTML may not round-trip perfectly.
 - The line-number gutter aligns numbers to each logical line's first fragment;
   unusual layouts may show minor alignment quirks.
 
@@ -207,23 +236,12 @@ are welcome.
 - Incremental highlight of every match in the document while typing
 
 **Documents & sessions**
-- Restore the previous set of open tabs on relaunch
-- A Recent Files menu and drag-and-drop to open
-- Watch the file on disk and offer to reload on external changes
-
-**Performance & undo**
-- Localized (range-based) edits for indent / Return / format instead of
-  whole-document replacement, to lighten very large files
-- Per-tab undo stacks that survive tab switches
+- Restore unsaved (untitled) tabs across launches, not just saved files
+- Reopen the last-closed tab
 
 **Preview**
 - A responsive-width / device-size toggle for the preview
 - Optional live reload and scroll-position sync between editor and preview
-
-**Export & customization**
-- Export to additional formats (e.g. Markdown, PNG screenshot)
-- A settings panel for indent width, font size, and editor theme
-- Pluggable color themes beyond the built-in light/dark palette
 
 ## License
 

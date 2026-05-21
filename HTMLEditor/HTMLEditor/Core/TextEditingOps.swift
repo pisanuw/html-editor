@@ -15,8 +15,90 @@ enum TextEditingOps {
 
     static let defaultIndentWidth = 2
 
+    /// A localized edit: the minimal range in the *original* text to replace,
+    /// the replacement string, and the resulting selection. Applying this with
+    /// `replaceCharacters(in:with:)` touches only the affected lines instead of
+    /// rewriting the whole document (cheaper, and a tighter undo grouping).
+    struct RangeEdit: Equatable {
+        let range: NSRange
+        let replacement: String
+        let selection: NSRange
+    }
+
     private static func unit(_ width: Int) -> String {
         String(repeating: " ", count: max(1, width))
+    }
+
+    // MARK: - Localized edits (range-based)
+
+    static func tabEdit(in text: String,
+                        selection: NSRange,
+                        indentWidth: Int = defaultIndentWidth) -> RangeEdit {
+        if selection.length == 0 {
+            let pad = unit(indentWidth)
+            let caret = NSRange(location: selection.location + (pad as NSString).length, length: 0)
+            return RangeEdit(range: selection, replacement: pad, selection: caret)
+        }
+        return indentEdit(in: text, selection: selection, indentWidth: indentWidth)
+    }
+
+    static func indentEdit(in text: String,
+                           selection: NSRange,
+                           indentWidth: Int = defaultIndentWidth) -> RangeEdit {
+        let pad = unit(indentWidth)
+        let padLen = (pad as NSString).length
+        let ns = text as NSString
+        let lineRange = ns.lineRange(for: selection)
+        let block = ns.substring(with: lineRange)
+
+        var firstLineAdded = 0
+        var addedAfterFirst = 0
+        var isFirst = true
+        let rebuilt = mapLines(block) { line in
+            defer { isFirst = false }
+            guard !line.isEmpty else { return line }
+            if isFirst { firstLineAdded = padLen } else { addedAfterFirst += padLen }
+            return pad + line
+        }
+        let selection2 = NSRange(location: selection.location + firstLineAdded,
+                                 length: selection.length + addedAfterFirst)
+        return RangeEdit(range: lineRange, replacement: rebuilt, selection: selection2)
+    }
+
+    static func outdentEdit(in text: String,
+                            selection: NSRange,
+                            indentWidth: Int = defaultIndentWidth) -> RangeEdit {
+        let width = max(1, indentWidth)
+        let ns = text as NSString
+        let lineRange = ns.lineRange(for: selection)
+        let block = ns.substring(with: lineRange)
+
+        var firstLineRemoved = 0
+        var isFirstLine = true
+        var removedAfterFirst = 0
+        let rebuilt = mapLines(block) { line in
+            let removed = leadingWhitespaceToRemove(line, max: width)
+            if isFirstLine { firstLineRemoved = removed; isFirstLine = false }
+            else { removedAfterFirst += removed }
+            return String(line.dropFirst(removed))
+        }
+        let newLoc = max(lineRange.location, selection.location - firstLineRemoved)
+        let newLen = max(0, selection.length - removedAfterFirst)
+        return RangeEdit(range: lineRange, replacement: rebuilt, selection: NSRange(location: newLoc, length: newLen))
+    }
+
+    static func newlineEdit(in text: String,
+                            selection: NSRange,
+                            indentWidth: Int = defaultIndentWidth) -> RangeEdit {
+        let ns = text as NSString
+        let caret = selection.location
+        let lineStart = lineStartIndex(ns, before: caret)
+        let currentLine = ns.substring(with: NSRange(location: lineStart, length: caret - lineStart))
+        var indent = leadingWhitespace(currentLine)
+        if shouldIncreaseIndent(beforeCaret: currentLine) { indent += unit(indentWidth) }
+        let insertion = "\n" + indent
+        let caretLoc = selection.location + (insertion as NSString).length
+        return RangeEdit(range: selection, replacement: insertion, selection: NSRange(location: caretLoc, length: 0))
     }
 
     // MARK: - Tab

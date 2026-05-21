@@ -38,6 +38,33 @@ enum ExportActions {
         }
     }
 
+    /// Export the document converted to Markdown.
+    static func exportMarkdown(_ html: String) {
+        let markdown = HTMLToMarkdown.convert(html)
+        let type = UTType(filenameExtension: "md") ?? .plainText
+        save(text: markdown, defaultName: base(for: html) + ".md", type: type)
+    }
+
+    /// Render the live preview to a PNG image file.
+    static func exportPNG(from webView: WKWebView?, sourceHTML: String) {
+        guard let webView else { NSSound.beep(); return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png]
+        panel.nameFieldStringValue = base(for: sourceHTML) + ".png"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let config = WKSnapshotConfiguration()
+        webView.takeSnapshot(with: config) { image, _ in
+            guard let image,
+                  let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let data = rep.representation(using: .png, properties: [:]) else {
+                NSSound.beep(); return
+            }
+            try? data.write(to: url)
+        }
+    }
+
     // MARK: - Private
 
     private static func save(text: String, defaultName: String, type: UTType) {

@@ -7,6 +7,8 @@ struct HtmlEditorApp: App {
     @StateObject private var findState = FindState()
     @StateObject private var previewStore = PreviewStore()
     @StateObject private var snippetStore = SnippetStore()
+    @StateObject private var settingsStore = AppSettingsStore()
+    @StateObject private var editorCache = EditorCache()
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +18,8 @@ struct HtmlEditorApp: App {
                 .environmentObject(findState)
                 .environmentObject(previewStore)
                 .environmentObject(snippetStore)
+                .environmentObject(settingsStore)
+                .environmentObject(editorCache)
                 .frame(minWidth: 900, minHeight: 600)
         }
         .commands {
@@ -24,11 +28,16 @@ struct HtmlEditorApp: App {
                 Button("New Tab")   { workspace.newTab() }.keyboardShortcut("t")
                 Button("New")       { workspace.newTab() }.keyboardShortcut("n")
                 Button("Open…")     { workspace.openInNewTab() }.keyboardShortcut("o")
+                Menu("Open Recent") {
+                    ForEach(workspace.recentURLs, id: \.self) { url in
+                        Button(url.lastPathComponent) { workspace.open(url: url) }
+                    }
+                }
                 Divider()
                 Button("Close Tab") { workspace.closeActiveTab() }.keyboardShortcut("w")
                 Divider()
-                Button("Save")      { workspace.activeDocument.saveDocument() }.keyboardShortcut("s")
-                Button("Save As…")  { workspace.activeDocument.saveDocumentAs() }
+                Button("Save")      { workspace.saveActive() }.keyboardShortcut("s")
+                Button("Save As…")  { workspace.saveActiveAs() }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
                 Divider()
                 Menu("Export") {
@@ -38,8 +47,16 @@ struct HtmlEditorApp: App {
                     Button("Minified HTML…") {
                         ExportActions.exportMinifiedHTML(workspace.activeDocument.htmlText)
                     }
+                    Button("Markdown…") {
+                        ExportActions.exportMarkdown(workspace.activeDocument.htmlText)
+                    }
+                    Divider()
                     Button("PDF…") {
                         ExportActions.exportPDF(from: previewStore.webView,
+                                                sourceHTML: workspace.activeDocument.htmlText)
+                    }
+                    Button("PNG Image…") {
+                        ExportActions.exportPNG(from: previewStore.webView,
                                                 sourceHTML: workspace.activeDocument.htmlText)
                     }
                 }
@@ -78,6 +95,10 @@ struct HtmlEditorApp: App {
                     Button("Manage Snippets…") { snippetStore.showingManager = true }
                 }
             }
+        }
+
+        Settings {
+            SettingsView().environmentObject(settingsStore)
         }
     }
 
