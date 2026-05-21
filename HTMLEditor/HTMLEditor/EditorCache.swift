@@ -5,6 +5,7 @@ import AppKit
 /// stack and text storage survive tab switches instead of being rebuilt.
 final class EditorCache: ObservableObject {
     private var views: [UUID: NSScrollView] = [:]
+    private var folders: [UUID: FoldingController] = [:]
 
     init() {
         NotificationCenter.default.addObserver(
@@ -15,7 +16,14 @@ final class EditorCache: ObservableObject {
 
     func scrollView(for id: UUID) -> NSScrollView? { views[id] }
     func store(_ view: NSScrollView, for id: UUID) { views[id] = view }
-    func discard(_ id: UUID) { views[id] = nil }
+
+    func foldingController(for id: UUID) -> FoldingController? { folders[id] }
+    func store(_ controller: FoldingController, for id: UUID) { folders[id] = controller }
+
+    func discard(_ id: UUID) {
+        views[id] = nil
+        folders[id] = nil
+    }
 }
 
 extension Notification.Name {

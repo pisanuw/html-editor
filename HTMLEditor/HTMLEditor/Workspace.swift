@@ -1,8 +1,10 @@
 import Foundation
+import AppKit
 import Combine
 
 /// Owns the set of open documents (tabs) and tracks which one is active.
-/// Persists the open-file session and a recent-files list across launches.
+/// Persists the open-tab session (including untitled buffers) and a recent-files
+/// list across launches, and keeps a stack of recently closed tabs for reopen.
 final class Workspace: ObservableObject {
     @Published private(set) var documents: [DocumentModel]
     @Published var activeID: UUID {
@@ -12,16 +14,22 @@ final class Workspace: ObservableObject {
 
     private let sessionKey = "HTMLEditor.session"
     private let recentKey = "HTMLEditor.recent"
+    private var closedTabs: [SessionTab] = []
 
     init() {
         recent = Workspace.loadRecent()
 
         let session = Workspace.loadSession()
-        var docs = session.openPaths.compactMap { DocumentModel(contentsOf: URL(fileURLWithPath: $0)) }
+        var docs = session.tabs.compactMap { Workspace.makeDocument(from: $0) }
         if docs.isEmpty { docs = [DocumentModel()] }
         documents = docs
         let index = min(max(session.safeActiveIndex, 0), docs.count - 1)
         activeID = docs[index].id
+
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.persistSession()
+        }
     }
 
     var activeDocument: DocumentModel {
@@ -29,6 +37,7 @@ final class Workspace: ObservableObject {
     }
 
     var recentURLs: [URL] { recent.paths.map { URL(fileURLWithPath: $0) } }
+    var canReopenClosed: Bool { !closedTabs.isEmpty }
 
     func select(_ id: UUID) { activeID = id }
 
@@ -38,7 +47,6 @@ final class Workspace: ObservableObject {
         activeID = doc.id
     }
 
-    /// Prompt for a file and open it in a new tab.
     func openInNewTab() {
         let doc = DocumentModel()
         if doc.openDocument() {
@@ -51,7 +59,6 @@ final class Workspace: ObservableObject {
     /// Open a specific file in a new tab (drag-and-drop, recent files, session).
     @discardableResult
     func open(url: URL) -> Bool {
-        // If already open, just focus it.
         if let existing = documents.first(where: { $0.fileURL == url }) {
             activeID = existing.id
             return true
@@ -63,7 +70,6 @@ final class Workspace: ObservableObject {
         return true
     }
 
-    /// Save the active document and record it in recents / session.
     func saveActive() {
         let doc = activeDocument
         doc.saveDocument()
@@ -83,6 +89,7 @@ final class Workspace: ObservableObject {
     func close(_ id: UUID) {
         guard documents.count > 1,
               let index = documents.firstIndex(where: { $0.id == id }) else { return }
+        pushClosed(documents[index])
         documents.remove(at: index)
         if activeID == id {
             let next = min(index, documents.count - 1)
@@ -92,7 +99,41 @@ final class Workspace: ObservableObject {
         }
     }
 
+    /// Reopen the most recently closed tab.
+    func reopenLastClosed() {
+        guard let tab = closedTabs.popLast() else { return }
+        if let path = tab.path {
+            open(url: URL(fileURLWithPath: path))
+            return
+        }
+        let doc = DocumentModel()
+        if let text = tab.text { doc.htmlText = text }
+        doc.windowTitle = tab.title.isEmpty ? "Untitled" : tab.title
+        documents.append(doc)
+        activeID = doc.id
+    }
+
+    /// Reveal a range in a (possibly other) tab — used by find-across-tabs.
+    func focus(_ id: UUID, selection: NSRange) {
+        if let doc = documents.first(where: { $0.id == id }) {
+            doc.savedSelection = selection
+        }
+        activeID = id
+    }
+
     // MARK: - Persistence
+
+    private func pushClosed(_ doc: DocumentModel) {
+        closedTabs.append(descriptor(for: doc))
+        if closedTabs.count > 20 { closedTabs.removeFirst() }
+    }
+
+    private func descriptor(for doc: DocumentModel) -> SessionTab {
+        if let path = doc.fileURL?.path {
+            return SessionTab(path: path, title: doc.windowTitle)
+        }
+        return SessionTab(path: nil, title: doc.windowTitle, text: doc.htmlText)
+    }
 
     private func noteRecent(_ path: String) {
         recent.add(path)
@@ -101,11 +142,20 @@ final class Workspace: ObservableObject {
     }
 
     private func persistSession() {
-        let paths = documents.compactMap { $0.fileURL?.path }
-        let activePath = activeDocument.fileURL?.path
-        let activeIndex = activePath.flatMap { paths.firstIndex(of: $0) } ?? 0
-        let state = SessionState(openPaths: paths, activeIndex: activeIndex)
+        let tabs = documents.map { descriptor(for: $0) }
+        let activeIndex = documents.firstIndex { $0.id == activeID } ?? 0
+        let state = SessionState(tabs: tabs, activeIndex: activeIndex)
         if let data = state.encoded() { UserDefaults.standard.set(data, forKey: sessionKey) }
+    }
+
+    private static func makeDocument(from tab: SessionTab) -> DocumentModel? {
+        if let path = tab.path {
+            return DocumentModel(contentsOf: URL(fileURLWithPath: path))
+        }
+        let doc = DocumentModel()
+        if let text = tab.text { doc.htmlText = text }
+        doc.windowTitle = tab.title.isEmpty ? "Untitled" : tab.title
+        return doc
     }
 
     private static func loadSession() -> SessionState {

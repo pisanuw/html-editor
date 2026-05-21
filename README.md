@@ -34,6 +34,9 @@ preview in a single split-view window.
   - Case-sensitive, whole-word, and regular-expression options
   - Replace and Replace All
   - The current selection pre-fills the search field
+  - Every match is highlighted in the document as you type
+  - "Find across all tabs" results panel — grouped by file, with line numbers;
+    click a result to jump to that tab and selection
 
 - **Tab / indent support**
   - `Tab` indents the selected lines (or inserts a 2-space soft tab)
@@ -52,8 +55,10 @@ preview in a single split-view window.
   - Colors are dynamic and stay legible in both light and dark mode
 
 - **Documents & sessions**
-  - Restores the previously open tabs (saved files) on relaunch
+  - Restores the previously open tabs on relaunch — including untitled buffers,
+    whose unsaved text is preserved
   - Recent Files menu (File ▸ Open Recent) and drag-and-drop `.html` to open
+  - Reopen the last closed tab (`⇧⌘T`)
   - Watches each open file on disk and offers to reload when it changes
     externally (the editor's own saves don't trigger the prompt)
 
@@ -63,11 +68,19 @@ preview in a single split-view window.
   - Markdown (headings, emphasis, links, images, lists, code, blockquotes)
   - PDF and PNG (rendered from the live preview)
 
+- **Preview controls**
+  - Responsive / device-width presets (Phone, Tablet, Desktop) that constrain
+    and center the rendered page
+  - Toggle live reload on/off, with a manual "Reload preview" command
+  - Optional scroll-position sync from editor to preview
+
 - **Customization**
   - Settings panel (`⌘,`) for indent width, editor font size, and theme
   - Pluggable color themes (Default, Midnight, Sepia), each light/dark aware
 
 - **Editing intelligence**
+  - **Code folding**: collapse/expand multi-line tag regions from the gutter
+    (click the disclosure triangle next to the opening line)
   - **Emmet abbreviation expansion** (`⌃E`): turn `ul>li.item$*3` or
     `nav>ul>li*2>a` into fully indented markup, expanded in place
   - **Auto-close tags**: typing the `>` of an opening tag inserts its matching
@@ -119,16 +132,18 @@ html-editor/
 │       ├── TabBarView.swift            # Tab strip
 │       ├── FindBar.swift               # Find/replace UI + state
 │       ├── EditorView.swift            # NSTextView wrapper (cached per tab; localized edits)
-│       ├── EditorCache.swift           # Reuses each tab's text view (per-tab undo)
+│       ├── EditorCache.swift           # Reuses each tab's text view + folding controller
+│       ├── FoldingController.swift     # Code folding via glyph suppression
 │       ├── FileWatcher.swift           # Dispatch-source file-change watcher
-│       ├── LineNumberRulerView.swift   # Line-number gutter
+│       ├── LineNumberRulerView.swift   # Line-number gutter + fold triangles
 │       ├── HTMLSyntaxHighlighter.swift # Maps tokens → text attributes
 │       ├── EditorTheme.swift           # Resolves the active palette to dynamic colors
 │       ├── AppSettingsStore.swift      # Persists EditorSettings; pushes the active theme
 │       ├── SettingsView.swift          # Settings panel (indent, font, theme)
-│       ├── PreviewView.swift           # WKWebView wrapper (debounced preview)
+│       ├── PreviewView.swift           # WKWebView wrapper (width, live-reload, scroll-sync)
 │       ├── ExportActions.swift         # Save panels; PDF / PNG / Markdown export
 │       ├── TextViewStore.swift         # Bridge from UI actions to the live text view
+│       ├── FindResultsView.swift       # Find-across-tabs results panel
 │       ├── SnippetStore.swift          # UserDefaults-backed snippet persistence
 │       ├── SnippetsView.swift          # Snippet management sheet
 │       └── Core/                       # Pure, Foundation-only, unit-tested logic
@@ -144,6 +159,9 @@ html-editor/
 │           ├── MultiCursor.swift       # Next-occurrence / split / column ranges
 │           ├── HTMLCompletion.swift    # Tag/attribute completion context
 │           ├── CodeStructure.swift     # Bracket matching + fold regions
+│           ├── FoldingModel.swift      # Hidden-range computation for folding
+│           ├── MultiFileSearch.swift   # Per-document search hits (line + preview)
+│           ├── PreviewWidth.swift      # Responsive / device-width presets
 │           ├── EditorSettings.swift    # Indent / font / theme settings model
 │           ├── ThemePalette.swift      # Named color palettes + hex parsing
 │           ├── SessionState.swift      # Open-tab session + recent-files models
@@ -190,6 +208,7 @@ Or open `Package.swift` in Xcode and press **⌘U**.
 | New               | `⌘N`           |
 | Open (new tab)    | `⌘O`           |
 | Close tab         | `⌘W`           |
+| Reopen closed tab | `⇧⌘T`          |
 | Save              | `⌘S`           |
 | Save As           | `⇧⌘S`          |
 | Find & replace    | `⌘F`           |
@@ -218,30 +237,24 @@ Or open `Package.swift` in Xcode and press **⌘U**.
   common cases (including embedded CSS/JS) well and is intentionally lightweight.
 - **HTML→Markdown conversion** targets clean, editor-produced markup; unusual or
   deeply nested arbitrary web HTML may not round-trip perfectly.
+- **Code folding** hides folded ranges by suppressing their glyphs at layout
+  time. Folding multiple regions and editing near a fold work, but very large or
+  deeply overlapping folds are an area to stress-test.
+- **Editor→preview scroll sync** maps by scroll fraction, so alignment is
+  approximate for pages whose rendered height differs a lot from the source.
 - The line-number gutter aligns numbers to each logical line's first fragment;
   unusual layouts may show minor alignment quirks.
 
 ## Future Extensions
 
-Ideas for where the editor could go next, roughly grouped by area. Contributions
-are welcome.
+The roadmap groups from earlier versions are now implemented. Remaining ideas,
+contributions welcome:
 
-**Editing**
-- Code folding: collapse multi-line tag regions from the gutter. The foldable
-  regions are already detected (`CodeStructure.foldableRegions`); the remaining
-  work is the gutter affordance and glyph hiding in the text view.
-
-**Search**
-- Find across all open tabs, with a results list
-- Incremental highlight of every match in the document while typing
-
-**Documents & sessions**
-- Restore unsaved (untitled) tabs across launches, not just saved files
-- Reopen the last-closed tab
-
-**Preview**
-- A responsive-width / device-size toggle for the preview
-- Optional live reload and scroll-position sync between editor and preview
+- **Search**: project-wide search across files on disk (not just open tabs)
+- **Preview**: bidirectional scroll sync (preview → editor) and element
+  inspection / click-to-source
+- **Editing**: persist fold state per file across launches; fold-all / unfold-all
+- **Collaboration**: multi-window or split-pane editing of the same document
 
 ## License
 

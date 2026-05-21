@@ -11,6 +11,7 @@ final class FindState: ObservableObject {
     @Published var wholeWord = false
     @Published var useRegex = false
     @Published var status = ""
+    @Published var showingResults = false
 
     var options: FindOptions {
         FindOptions(caseSensitive: caseSensitive, wholeWord: wholeWord, useRegex: useRegex)
@@ -19,6 +20,12 @@ final class FindState: ObservableObject {
     func reset() {
         status = ""
     }
+}
+
+extension Notification.Name {
+    /// Posted when the find query/options/visibility change so editors can
+    /// refresh their "highlight every match" overlay.
+    static let findHighlightChanged = Notification.Name("HTMLEditor.findHighlightChanged")
 }
 
 /// A find/replace bar shown above the editor. Mirrors familiar editor controls:
@@ -46,6 +53,11 @@ struct FindBarView: View {
                     .help("Previous match")
                 Button(action: findNext) { Image(systemName: "chevron.down") }
                     .help("Next match")
+
+                Button(action: { findState.showingResults = true }) {
+                    Image(systemName: "list.bullet.rectangle")
+                }
+                .help("Find across all tabs")
 
                 Text(findState.status)
                     .foregroundColor(.secondary)
@@ -113,6 +125,7 @@ struct FindBarView: View {
     }
 
     private func updateCount() {
+        NotificationCenter.default.post(name: .findHighlightChanged, object: nil)
         guard !findState.query.isEmpty else { findState.status = ""; return }
         let total = textViewStore.count(of: findState.query, options: findState.options)
         findState.status = total == 0 ? "Not found" : "\(total) found"
@@ -129,5 +142,6 @@ struct FindBarView: View {
     private func close() {
         findState.isVisible = false
         findState.reset()
+        NotificationCenter.default.post(name: .findHighlightChanged, object: nil)
     }
 }

@@ -28,6 +28,12 @@ struct ContentView: View {
         .sheet(isPresented: $snippetStore.showingManager) {
             SnippetsView().environmentObject(snippetStore)
         }
+        .sheet(isPresented: $findState.showingResults) {
+            FindResultsView()
+                .environmentObject(workspace)
+                .environmentObject(findState)
+                .environmentObject(textViewStore)
+        }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             for provider in providers {
                 _ = provider.loadObject(ofClass: URL.self) { url, _ in
@@ -119,6 +125,21 @@ struct ContentView: View {
                 Label("Export", systemImage: "square.and.arrow.up")
             }
             .help("Export")
+
+            Menu {
+                Picker("Width", selection: $previewStore.width) {
+                    ForEach(PreviewWidth.allCases) { Text($0.label).tag($0) }
+                }
+                Toggle("Live reload", isOn: $previewStore.liveReload)
+                Toggle("Scroll sync", isOn: $previewStore.scrollSync)
+                Divider()
+                Button("Reload preview") {
+                    previewStore.reload(workspace.activeDocument.htmlText)
+                }
+            } label: {
+                Label("Preview", systemImage: "rectangle.righthalf.inset.filled")
+            }
+            .help("Preview options")
         }
     }
 
@@ -139,6 +160,7 @@ struct ContentView: View {
 /// directly so SwiftUI refreshes the preview and cursor readout as it changes.
 private struct DocumentPane: View {
     @ObservedObject var document: DocumentModel
+    @EnvironmentObject var previewStore: PreviewStore
 
     var body: some View {
         VStack(spacing: 0) {
@@ -159,12 +181,29 @@ private struct DocumentPane: View {
             HSplitView {
                 EditorView(document: document)
                     .frame(minWidth: 300)
-                PreviewView(html: document.htmlText)
+                preview
                     .frame(minWidth: 300)
             }
             StatusBar(document: document)
         }
         .navigationTitle(document.windowTitle)
+    }
+
+    /// The preview, constrained to a device width when one is selected
+    /// (centered in the available space), or filling the pane when responsive.
+    @ViewBuilder
+    private var preview: some View {
+        if let width = previewStore.width.points {
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                PreviewView(html: document.htmlText)
+                    .frame(width: CGFloat(width))
+                Spacer(minLength: 0)
+            }
+            .background(Color(NSColor.windowBackgroundColor))
+        } else {
+            PreviewView(html: document.htmlText)
+        }
     }
 }
 

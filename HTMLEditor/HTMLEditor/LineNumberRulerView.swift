@@ -6,6 +6,8 @@ import AppKit
 final class LineNumberRulerView: NSRulerView {
 
     private weak var managedTextView: NSTextView?
+    weak var foldingController: FoldingController?
+    private var foldControls: [(line0: Int, rect: NSRect, folded: Bool)] = []
 
     init(textView: NSTextView) {
         self.managedTextView = textView
@@ -46,6 +48,9 @@ final class LineNumberRulerView: NSRulerView {
         // Offset between the text view's coordinate space and the ruler's.
         let yOffset = convert(NSPoint.zero, from: textView).y
 
+        foldControls.removeAll()
+        let foldableLines = foldingController?.foldableLines() ?? []
+
         let attributes: [NSAttributedString.Key: Any] = [
             .font: rulerFont,
             .foregroundColor: NSColor.secondaryLabelColor
@@ -75,10 +80,19 @@ final class LineNumberRulerView: NSRulerView {
             var effectiveRange = NSRange()
             let fragmentRect = layoutManager.lineFragmentRect(forGlyphAt: lineGlyphRange.location,
                                                               effectiveRange: &effectiveRange)
+            let lineY = fragmentRect.minY + yOffset + inset
             draw(number: lineNumber,
-                 atY: fragmentRect.minY + yOffset + inset,
+                 atY: lineY,
                  height: fragmentRect.height,
                  attributes: attributes)
+
+            // Fold triangle for foldable lines (0-based line index).
+            let line0 = lineNumber - 1
+            if foldableLines.contains(line0) {
+                let folded = foldingController?.isFolded(line: line0) ?? false
+                let rect = drawFoldTriangle(atY: lineY, height: fragmentRect.height, folded: folded)
+                foldControls.append((line0: line0, rect: rect, folded: folded))
+            }
 
             lineNumber += 1
             if lineGlyphRange.length == 0 {
@@ -110,5 +124,37 @@ final class LineNumberRulerView: NSRulerView {
                               width: size.width,
                               height: size.height)
         label.draw(in: drawRect, withAttributes: attributes)
+    }
+
+    /// Draw a fold disclosure triangle near the left edge and return its
+    /// (slightly padded) clickable rect.
+    @discardableResult
+    private func drawFoldTriangle(atY y: CGFloat, height: CGFloat, folded: Bool) -> NSRect {
+        let box = NSRect(x: 3, y: y + (height - 9) / 2, width: 9, height: 9)
+        let path = NSBezierPath()
+        if folded {
+            // ▶ pointing right
+            path.move(to: NSPoint(x: box.minX + 1, y: box.minY))
+            path.line(to: NSPoint(x: box.maxX - 1, y: box.midY))
+            path.line(to: NSPoint(x: box.minX + 1, y: box.maxY))
+        } else {
+            // ▼ pointing down
+            path.move(to: NSPoint(x: box.minX, y: box.maxY - 1))
+            path.line(to: NSPoint(x: box.maxX, y: box.maxY - 1))
+            path.line(to: NSPoint(x: box.midX, y: box.minY + 1))
+        }
+        path.close()
+        NSColor.secondaryLabelColor.setFill()
+        path.fill()
+        return box.insetBy(dx: -3, dy: -3)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if let control = foldControls.first(where: { $0.rect.contains(point) }) {
+            foldingController?.toggle(line: control.line0)
+            return
+        }
+        super.mouseDown(with: event)
     }
 }

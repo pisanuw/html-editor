@@ -16,12 +16,14 @@ final class AppSettingsStore: ObservableObject {
             settings = .default
         }
         EditorTheme.current = ThemeLibrary.palette(named: settings.themeName)
+        EditorTheme.fontSize = CGFloat(settings.fontSize)
     }
 
     var palette: ThemePalette { ThemeLibrary.palette(named: settings.themeName) }
 
     private func apply() {
         EditorTheme.current = palette
+        EditorTheme.fontSize = CGFloat(settings.fontSize)
         if let data = settings.encoded() {
             UserDefaults.standard.set(data, forKey: key)
         }

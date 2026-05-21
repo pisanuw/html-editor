@@ -10,6 +10,8 @@ struct EditorView: NSViewRepresentable {
     @EnvironmentObject var textViewStore: TextViewStore
     @EnvironmentObject var settingsStore: AppSettingsStore
     @EnvironmentObject var editorCache: EditorCache
+    @EnvironmentObject var findState: FindState
+    @EnvironmentObject var previewStore: PreviewStore
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -62,6 +64,16 @@ struct EditorView: NSViewRepresentable {
         scrollView.rulersVisible = true
         coordinator.ruler = ruler
 
+        // Folding: one controller per document, retained by the cache so its
+        // delegate connection and fold state survive tab switches.
+        let folder = editorCache.foldingController(for: document.id) ?? FoldingController()
+        folder.textView = textView
+        textView.layoutManager?.delegate = folder
+        folder.recompute()
+        ruler.foldingController = folder
+        coordinator.folder = folder
+        editorCache.store(folder, for: document.id)
+
         scrollView.contentView.postsBoundsChangedNotifications = true
         coordinator.observeScrolling(of: scrollView.contentView)
 
@@ -79,6 +91,13 @@ struct EditorView: NSViewRepresentable {
         textViewStore.textView = textView
         if let ruler = scrollView.verticalRulerView as? LineNumberRulerView {
             coordinator.ruler = ruler
+            if let folder = editorCache.foldingController(for: document.id) {
+                folder.textView = textView
+                textView.layoutManager?.delegate = folder
+                folder.recompute()
+                ruler.foldingController = folder
+                coordinator.folder = folder
+            }
         }
         coordinator.observeScrolling(of: scrollView.contentView)
         coordinator.applySettings()
@@ -132,16 +151,21 @@ struct EditorView: NSViewRepresentable {
         var isAutoClosing = false
         weak var ruler: LineNumberRulerView?
         weak var textView: NSTextView?
+        weak var folder: FoldingController?
         private var observers: [NSObjectProtocol] = []
 
         init(_ parent: EditorView) {
             self.parent = parent
             super.init()
-            let token = NotificationCenter.default.addObserver(
+            let settingsToken = NotificationCenter.default.addObserver(
                 forName: .editorSettingsChanged, object: nil, queue: .main) { [weak self] _ in
                 self?.applySettings()
             }
-            observers.append(token)
+            let findToken = NotificationCenter.default.addObserver(
+                forName: .findHighlightChanged, object: nil, queue: .main) { [weak self] _ in
+                if let tv = self?.textView { self?.updateAllHighlights(tv) }
+            }
+            observers.append(contentsOf: [settingsToken, findToken])
         }
 
         deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
@@ -164,8 +188,18 @@ struct EditorView: NSViewRepresentable {
                 object: clipView,
                 queue: .main) { [weak self] _ in
                 self?.ruler?.refresh()
+                self?.syncPreviewScroll()
             }
             observers.append(token)
+        }
+
+        /// Mirror the editor's vertical scroll fraction to the preview (no-op
+        /// unless the user enabled scroll sync).
+        private func syncPreviewScroll() {
+            guard let tv = textView, let clip = tv.enclosingScrollView?.contentView else { return }
+            let denom = max(1, tv.bounds.height - clip.bounds.height)
+            let fraction = Double(max(0, clip.bounds.origin.y) / denom)
+            parent.previewStore.syncScroll(fraction: fraction)
         }
 
         func textDidChange(_ notification: Notification) {
@@ -178,7 +212,9 @@ struct EditorView: NSViewRepresentable {
             }
             let newText = tv.string
             isEditing = false
+            folder?.recompute()
             ruler?.refresh()
+            updateAllHighlights(tv)
             DispatchQueue.main.async { [weak self] in
                 self?.parent.document.htmlText = newText
             }
@@ -189,28 +225,39 @@ struct EditorView: NSViewRepresentable {
             let selection = tv.selectedRange()
             let str = tv.string
             parent.document.savedSelection = selection
-            updateMatchHighlight(tv)
+            updateAllHighlights(tv)
             DispatchQueue.main.async { [weak self] in
                 self?.parent.document.updateCursor(in: str, at: selection.location)
             }
         }
 
-        /// Highlight the matching tag-name pair or bracket pair around the caret.
-        private func updateMatchHighlight(_ tv: NSTextView) {
+        /// Apply all background highlights: every find match (when the find bar
+        /// is open) plus the matching tag/bracket pair around the caret.
+        private func updateAllHighlights(_ tv: NSTextView) {
             guard let lm = tv.layoutManager else { return }
-            let full = NSRange(location: 0, length: (tv.string as NSString).length)
+            let text = tv.string
+            let full = NSRange(location: 0, length: (text as NSString).length)
             lm.removeTemporaryAttribute(.backgroundColor, forCharacterRange: full)
 
+            // Find matches (incremental highlight of every match while typing).
+            let find = parent.findState
+            if find.isVisible && !find.query.isEmpty {
+                let matchColor = NSColor.systemYellow.withAlphaComponent(0.40)
+                for range in FindEngine.matches(in: text, query: find.query, options: find.options) {
+                    lm.addTemporaryAttribute(.backgroundColor, value: matchColor, forCharacterRange: range)
+                }
+            }
+
+            // Matching tag/bracket pair around the caret.
             let caret = tv.selectedRange()
             guard caret.length == 0 else { return }
-            let color = NSColor.systemTeal.withAlphaComponent(0.30)
-
-            if let (a, b) = TagEditing.matchingTagNameRanges(in: tv.string, caret: caret.location) {
-                lm.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: a)
-                lm.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: b)
-            } else if let (open, close) = CodeStructure.matchingBracket(in: tv.string, caret: caret.location) {
-                lm.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: open)
-                lm.addTemporaryAttribute(.backgroundColor, value: color, forCharacterRange: close)
+            let pairColor = NSColor.systemTeal.withAlphaComponent(0.30)
+            if let (a, b) = TagEditing.matchingTagNameRanges(in: text, caret: caret.location) {
+                lm.addTemporaryAttribute(.backgroundColor, value: pairColor, forCharacterRange: a)
+                lm.addTemporaryAttribute(.backgroundColor, value: pairColor, forCharacterRange: b)
+            } else if let (open, close) = CodeStructure.matchingBracket(in: text, caret: caret.location) {
+                lm.addTemporaryAttribute(.backgroundColor, value: pairColor, forCharacterRange: open)
+                lm.addTemporaryAttribute(.backgroundColor, value: pairColor, forCharacterRange: close)
             }
         }
 

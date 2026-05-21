@@ -82,15 +82,25 @@ final class CustomizationAndSessionTests: XCTestCase {
     // MARK: - SessionState
 
     func testSessionActiveIndexClamped() {
-        let s = SessionState(openPaths: ["a", "b"], activeIndex: 9)
+        let s = SessionState(tabs: [SessionTab(title: "a"), SessionTab(title: "b")], activeIndex: 9)
         XCTAssertEqual(s.safeActiveIndex, 1)
-        let empty = SessionState(openPaths: [], activeIndex: 3)
+        let empty = SessionState(tabs: [], activeIndex: 3)
         XCTAssertEqual(empty.safeActiveIndex, 0)
     }
 
     func testSessionRoundTrip() {
-        let s = SessionState(openPaths: ["a", "b"], activeIndex: 1)
+        let s = SessionState(tabs: [
+            SessionTab(path: "/tmp/a.html", title: "a.html"),
+            SessionTab(path: nil, title: "Untitled", text: "<p>draft</p>")
+        ], activeIndex: 1)
         XCTAssertEqual(SessionState.decoded(from: s.encoded()!), s)
+    }
+
+    func testSessionUntitledTextPreserved() {
+        let s = SessionState(tabs: [SessionTab(title: "Untitled", text: "<h1>hi</h1>")], activeIndex: 0)
+        let restored = SessionState.decoded(from: s.encoded()!)
+        XCTAssertEqual(restored?.tabs.first?.text, "<h1>hi</h1>")
+        XCTAssertNil(restored?.tabs.first?.path)
     }
 
     // MARK: - Localized range edits

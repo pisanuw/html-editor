@@ -25,20 +25,35 @@ struct RecentFiles: Codable, Equatable {
     static func decoded(from data: Data) -> RecentFiles? { try? JSONDecoder().decode(RecentFiles.self, from: data) }
 }
 
-/// The set of open documents to restore on relaunch.
+/// One restorable tab: a file path (file-backed) and/or unsaved text (untitled
+/// or unsaved buffer). `text` is stored for tabs without a path so untitled
+/// work survives a relaunch.
+struct SessionTab: Codable, Equatable {
+    var path: String?
+    var title: String
+    var text: String?
+
+    init(path: String? = nil, title: String, text: String? = nil) {
+        self.path = path
+        self.title = title
+        self.text = text
+    }
+}
+
+/// The set of open tabs to restore on relaunch.
 struct SessionState: Codable, Equatable {
-    var openPaths: [String]
+    var tabs: [SessionTab]
     var activeIndex: Int
 
-    init(openPaths: [String] = [], activeIndex: Int = 0) {
-        self.openPaths = openPaths
+    init(tabs: [SessionTab] = [], activeIndex: Int = 0) {
+        self.tabs = tabs
         self.activeIndex = activeIndex
     }
 
-    /// The active index clamped to a valid position for `openPaths`.
+    /// The active index clamped to a valid position for `tabs`.
     var safeActiveIndex: Int {
-        guard !openPaths.isEmpty else { return 0 }
-        return min(max(activeIndex, 0), openPaths.count - 1)
+        guard !tabs.isEmpty else { return 0 }
+        return min(max(activeIndex, 0), tabs.count - 1)
     }
 
     func encoded() -> Data? { try? JSONEncoder().encode(self) }

@@ -10,6 +10,11 @@ enum EditorTheme {
     /// settings store updates it when the user picks another theme.
     static var current: ThemePalette = ThemeLibrary.defaultTheme
 
+    /// The editor font size, kept in sync with the settings. The highlighter
+    /// uses ``font`` so re-highlighting preserves the chosen size.
+    static var fontSize: CGFloat = 13
+    static var font: NSFont { .monospacedSystemFont(ofSize: fontSize, weight: .regular) }
+
     /// The default text color for un-tokenized source.
     static var foreground: NSColor { color(current.foreground) }
 

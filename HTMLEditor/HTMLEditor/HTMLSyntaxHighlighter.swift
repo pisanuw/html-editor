@@ -6,8 +6,6 @@ import AppKit
 /// onto text attributes using the dark/light-aware ``EditorTheme``.
 enum HTMLSyntaxHighlighter {
 
-    private static let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-
     static func highlight(_ storage: NSTextStorage) {
         let str = storage.string
         let full = NSRange(location: 0, length: (str as NSString).length)
@@ -15,7 +13,7 @@ enum HTMLSyntaxHighlighter {
         storage.beginEditing()
 
         // Reset every character to the default appearance first.
-        storage.addAttribute(.font, value: font, range: full)
+        storage.addAttribute(.font, value: EditorTheme.font, range: full)
         storage.addAttribute(.foregroundColor, value: EditorTheme.foreground, range: full)
 
         // Then color each classified token. Tokens are non-overlapping, so the

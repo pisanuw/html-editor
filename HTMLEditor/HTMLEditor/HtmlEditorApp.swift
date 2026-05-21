@@ -35,6 +35,8 @@ struct HtmlEditorApp: App {
                 }
                 Divider()
                 Button("Close Tab") { workspace.closeActiveTab() }.keyboardShortcut("w")
+                Button("Reopen Closed Tab") { workspace.reopenLastClosed() }
+                    .keyboardShortcut("t", modifiers: [.command, .shift])
                 Divider()
                 Button("Save")      { workspace.saveActive() }.keyboardShortcut("s")
                 Button("Save As…")  { workspace.saveActiveAs() }
