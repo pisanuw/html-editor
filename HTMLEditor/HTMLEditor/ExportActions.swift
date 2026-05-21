@@ -1,0 +1,58 @@
+import AppKit
+import WebKit
+import UniformTypeIdentifiers
+
+/// File-producing export actions. The string transforms come from the pure,
+/// tested `HTMLExporter`; this layer adds the AppKit save panels and the
+/// WebKit PDF rendering that cannot be unit-tested.
+enum ExportActions {
+
+    /// Export a complete, standalone HTML document (wrapping a fragment in a
+    /// minimal HTML5 skeleton if needed).
+    static func exportStandaloneHTML(_ html: String) {
+        let document = HTMLExporter.standaloneDocument(html)
+        save(text: document, defaultName: HTMLExporter.suggestedFilename(for: html), type: .html)
+    }
+
+    /// Export a minified copy of the document.
+    static func exportMinifiedHTML(_ html: String) {
+        let minified = HTMLExporter.minify(html)
+        save(text: minified, defaultName: minifiedName(for: html), type: .html)
+    }
+
+    /// Render the live preview to a PDF file.
+    static func exportPDF(from webView: WKWebView?, sourceHTML: String) {
+        guard let webView else { NSSound.beep(); return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = pdfName(for: sourceHTML)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        webView.createPDF(configuration: WKPDFConfiguration()) { result in
+            switch result {
+            case .success(let data):
+                try? data.write(to: url)
+            case .failure:
+                NSSound.beep()
+            }
+        }
+    }
+
+    // MARK: - Private
+
+    private static func save(text: String, defaultName: String, type: UTType) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [type]
+        panel.nameFieldStringValue = defaultName
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func base(for html: String) -> String {
+        let name = HTMLExporter.suggestedFilename(for: html)
+        return name.hasSuffix(".html") ? String(name.dropLast(5)) : name
+    }
+
+    private static func minifiedName(for html: String) -> String { base(for: html) + ".min.html" }
+    private static func pdfName(for html: String) -> String { base(for: html) + ".pdf" }
+}

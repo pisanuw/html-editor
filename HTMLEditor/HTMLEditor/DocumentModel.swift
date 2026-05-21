@@ -3,12 +3,20 @@ import AppKit
 import UniformTypeIdentifiers
 import Combine
 
-class DocumentModel: ObservableObject {
+/// A single open document (one editor tab). Owns its text, file association,
+/// cursor position, and the selection to restore when its tab is reactivated.
+class DocumentModel: ObservableObject, Identifiable {
+    let id = UUID()
+
     @Published var htmlText: String = DocumentModel.defaultHTML
     @Published var fileURL: URL?
     @Published var windowTitle: String = "Untitled"
     @Published var cursorLine: Int = 1
     @Published var cursorColumn: Int = 1
+
+    /// Selection to restore when this document's tab becomes active again.
+    /// Updated as the user moves the caret; consumed by `EditorView`.
+    var savedSelection: NSRange?
 
     private static let defaultHTML = """
     <!DOCTYPE html>
@@ -31,17 +39,21 @@ class DocumentModel: ObservableObject {
         htmlText = Self.defaultHTML
         fileURL = nil
         windowTitle = "Untitled"
+        savedSelection = nil
     }
 
-    func openDocument() {
+    @discardableResult
+    func openDocument() -> Bool {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.html]
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        guard let content = try? String(contentsOf: url, encoding: .utf8) else { return }
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
+        guard let content = try? String(contentsOf: url, encoding: .utf8) else { return false }
         htmlText = content
         fileURL = url
         windowTitle = url.lastPathComponent
+        savedSelection = nil
+        return true
     }
 
     func saveDocument() {
@@ -55,24 +67,15 @@ class DocumentModel: ObservableObject {
     func saveDocumentAs() {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.html]
-        panel.nameFieldStringValue = "index.html"
+        panel.nameFieldStringValue = HTMLExporter.suggestedFilename(for: htmlText)
         guard panel.runModal() == .OK, let url = panel.url else { return }
         write(to: url)
     }
 
     func updateCursor(in string: String, at location: Int) {
-        var line = 1
-        var lineStart = 0
-        let nsString = string as NSString
-        let end = min(location, nsString.length)
-        for i in 0..<end {
-            if nsString.character(at: i) == 10 {
-                line += 1
-                lineStart = i + 1
-            }
-        }
-        cursorLine = line
-        cursorColumn = location - lineStart + 1
+        let position = TextMetrics.lineColumn(in: string, at: location)
+        cursorLine = position.line
+        cursorColumn = position.column
     }
 
     private func write(to url: URL) {

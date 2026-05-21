@@ -1,51 +1,31 @@
 import AppKit
 
+/// Applies syntax coloring to an `NSTextStorage`. The actual classification is
+/// done by the pure, unit-tested ``SyntaxTokenizer`` (which understands HTML
+/// plus embedded CSS and JavaScript); this type only maps the resulting tokens
+/// onto text attributes using the dark/light-aware ``EditorTheme``.
 enum HTMLSyntaxHighlighter {
 
-    // MARK: - Colors (adapt for dark/light mode via NSColor semantics)
-    private static let tagColor     = NSColor(red: 0.00, green: 0.48, blue: 0.86, alpha: 1) // blue
-    private static let attrColor    = NSColor(red: 0.55, green: 0.15, blue: 0.75, alpha: 1) // purple
-    private static let stringColor  = NSColor(red: 0.78, green: 0.18, blue: 0.18, alpha: 1) // red
-    private static let commentColor = NSColor(red: 0.38, green: 0.52, blue: 0.38, alpha: 1) // muted green
-    private static let doctypeColor = NSColor.secondaryLabelColor
+    private static let font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
 
     static func highlight(_ storage: NSTextStorage) {
         let str = storage.string
-        guard !str.isEmpty else { return }
-        let full = NSRange(str.startIndex..., in: str)
+        let full = NSRange(location: 0, length: (str as NSString).length)
 
         storage.beginEditing()
 
-        // Reset to defaults
-        storage.addAttribute(.foregroundColor, value: NSColor.labelColor, range: full)
-        storage.addAttribute(.font,
-            value: NSFont.monospacedSystemFont(ofSize: 13, weight: .regular),
-            range: full)
+        // Reset every character to the default appearance first.
+        storage.addAttribute(.font, value: font, range: full)
+        storage.addAttribute(.foregroundColor, value: EditorTheme.foreground, range: full)
 
-        // Order matters: later rules override earlier ones for the same range.
-        // Comments must come last so they win over tag/attr colors inside them.
-        apply("<!DOCTYPE[^>]*>",   color: doctypeColor, to: storage, in: str, options: .caseInsensitive)
-        apply("</?[a-zA-Z][a-zA-Z0-9-]*", color: tagColor,   to: storage, in: str)
-        apply("/?>",               color: tagColor,    to: storage, in: str)
-        apply("\\b[a-zA-Z-]+(?=\\s*=)", color: attrColor, to: storage, in: str)
-        apply("\"[^\"\\n]*\"",    color: stringColor,  to: storage, in: str)
-        apply("'[^'\\n]*'",       color: stringColor,  to: storage, in: str)
-        apply("<!--[\\s\\S]*?-->", color: commentColor, to: storage, in: str)
+        // Then color each classified token. Tokens are non-overlapping, so the
+        // order in which we apply them does not matter.
+        for token in SyntaxTokenizer.tokenize(str) {
+            storage.addAttribute(.foregroundColor,
+                                 value: EditorTheme.color(for: token.type),
+                                 range: token.range)
+        }
 
         storage.endEditing()
-    }
-
-    private static func apply(
-        _ pattern: String,
-        color: NSColor,
-        to storage: NSTextStorage,
-        in str: String,
-        options: NSRegularExpression.Options = []
-    ) {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return }
-        let full = NSRange(str.startIndex..., in: str)
-        for match in regex.matches(in: str, range: full) {
-            storage.addAttribute(.foregroundColor, value: color, range: match.range)
-        }
     }
 }

@@ -1,16 +1,20 @@
 import SwiftUI
 import AppKit
 
+/// The code editor for one document. Recreated per active tab (keyed by the
+/// document id in `ContentView`), so its `NSTextView` always reflects the active
+/// document. Restores the document's saved selection on appear and records it as
+/// the caret moves, so switching tabs keeps each document's cursor position.
 struct EditorView: NSViewRepresentable {
-    @Binding var text: String
-    @EnvironmentObject var document: DocumentModel
+    @ObservedObject var document: DocumentModel
     @EnvironmentObject var textViewStore: TextViewStore
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = makeTextView(coordinator: context.coordinator)
-        applyHighlight(to: textView, string: text)
+        textView.string = document.htmlText
+        applyHighlight(to: textView)
         textViewStore.textView = textView
 
         let scrollView = NSScrollView()
@@ -19,24 +23,46 @@ struct EditorView: NSViewRepresentable {
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
+
+        // Line-number gutter.
+        let ruler = LineNumberRulerView(textView: textView)
+        scrollView.verticalRulerView = ruler
+        scrollView.hasVerticalRuler = true
+        scrollView.rulersVisible = true
+        context.coordinator.ruler = ruler
+
+        // Redraw line numbers while scrolling.
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        context.coordinator.observeScrolling(of: scrollView.contentView)
+
+        // Restore this document's last selection.
+        if let saved = document.savedSelection {
+            let clamped = clamp(saved, to: textView.string)
+            textView.setSelectedRange(clamped)
+            DispatchQueue.main.async { textView.scrollRangeToVisible(clamped) }
+        }
+
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         textViewStore.textView = textView
-        guard !context.coordinator.isEditing, textView.string != text else { return }
+        guard !context.coordinator.isEditing, textView.string != document.htmlText else { return }
         let sel = textView.selectedRange()
-        textView.string = text
-        applyHighlight(to: textView, string: text)
-        let clampedSel = NSRange(
-            location: min(sel.location, text.utf16.count),
-            length: 0
-        )
-        textView.setSelectedRange(clampedSel)
+        textView.string = document.htmlText
+        applyHighlight(to: textView)
+        textView.setSelectedRange(clamp(sel, to: document.htmlText))
+        context.coordinator.ruler?.refresh()
     }
 
     // MARK: - Helpers
+
+    private func clamp(_ range: NSRange, to text: String) -> NSRange {
+        let length = (text as NSString).length
+        let location = min(range.location, length)
+        return NSRange(location: location, length: min(range.length, length - location))
+    }
 
     private func makeTextView(coordinator: Coordinator) -> NSTextView {
         let textView = NSTextView()
@@ -52,11 +78,10 @@ struct EditorView: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 6, height: 8)
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = coordinator
-        textView.string = text
         return textView
     }
 
-    private func applyHighlight(to textView: NSTextView, string: String) {
+    private func applyHighlight(to textView: NSTextView) {
         guard let storage = textView.textStorage else { return }
         HTMLSyntaxHighlighter.highlight(storage)
     }
@@ -66,8 +91,18 @@ struct EditorView: NSViewRepresentable {
     class Coordinator: NSObject, NSTextViewDelegate {
         var parent: EditorView
         var isEditing = false
+        weak var ruler: LineNumberRulerView?
 
         init(_ parent: EditorView) { self.parent = parent }
+
+        func observeScrolling(of clipView: NSClipView) {
+            NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification,
+                object: clipView,
+                queue: .main) { [weak self] _ in
+                self?.ruler?.refresh()
+            }
+        }
 
         func textDidChange(_ notification: Notification) {
             guard !isEditing, let tv = notification.object as? NSTextView else { return }
@@ -79,21 +114,47 @@ struct EditorView: NSViewRepresentable {
             }
             let newText = tv.string
             isEditing = false
-            // Defer @Binding update to avoid publishing during a SwiftUI view update.
+            ruler?.refresh()
+            // Defer @Published update to avoid publishing during a SwiftUI update.
             DispatchQueue.main.async { [weak self] in
-                self?.parent.text = newText
+                self?.parent.document.htmlText = newText
             }
         }
 
         func textViewDidChangeSelection(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
-            let loc = tv.selectedRange().location
+            let selection = tv.selectedRange()
             let str = tv.string
-            // Defer to avoid publishing during the view-update cycle that
-            // triggered setSelectedRange (e.g. from updateNSView).
+            parent.document.savedSelection = selection
             DispatchQueue.main.async { [weak self] in
-                self?.parent.document.updateCursor(in: str, at: loc)
+                self?.parent.document.updateCursor(in: str, at: selection.location)
             }
+        }
+
+        // Intercept Tab / Shift-Tab / Return for smart indentation.
+        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+            let selection = textView.selectedRange()
+            switch commandSelector {
+            case #selector(NSResponder.insertTab(_:)):
+                apply(TextEditingOps.insertTab(in: textView.string, selection: selection), to: textView)
+                return true
+            case #selector(NSResponder.insertBacktab(_:)):
+                apply(TextEditingOps.outdentLines(in: textView.string, selection: selection), to: textView)
+                return true
+            case #selector(NSResponder.insertNewline(_:)):
+                apply(TextEditingOps.insertNewline(in: textView.string, selection: selection), to: textView)
+                return true
+            default:
+                return false
+            }
+        }
+
+        private func apply(_ result: TextEditingOps.EditResult, to tv: NSTextView) {
+            let whole = NSRange(location: 0, length: (tv.string as NSString).length)
+            guard tv.shouldChangeText(in: whole, replacementString: result.text) else { return }
+            tv.replaceCharacters(in: whole, with: result.text)
+            tv.didChangeText()
+            tv.setSelectedRange(result.selection)
         }
     }
 }
