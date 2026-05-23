@@ -65,6 +65,23 @@ enum ExportActions {
         }
     }
 
+    /// Write the HTML to a temp file and open it in the default browser.
+    static func openInBrowser(_ html: String) {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HTMLEditorPreview.html")
+        try? html.write(to: url, atomically: true, encoding: .utf8)
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Print the rendered preview using the live WKWebView.
+    static func printPreview(_ webView: WKWebView?) {
+        guard let webView else { NSSound.beep(); return }
+        let op = webView.printOperation(with: NSPrintInfo.shared)
+        op.showsPrintPanel = true
+        op.showsProgressPanel = true
+        op.run()
+    }
+
     // MARK: - Private
 
     private static func save(text: String, defaultName: String, type: UTType) {

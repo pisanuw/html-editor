@@ -41,6 +41,24 @@ class TextViewStore: ObservableObject {
         replace(range: whole, with: newText, in: tv)
     }
 
+    // MARK: - Navigation
+
+    func goToLine(_ line: Int) {
+        guard let tv = textView, line >= 1 else { return }
+        let text = tv.string as NSString
+        var currentLine = 1
+        var charIndex = 0
+        while charIndex < text.length {
+            if currentLine == line { break }
+            if text.character(at: charIndex) == 10 { currentLine += 1 }
+            charIndex += 1
+        }
+        let range = NSRange(location: min(charIndex, text.length), length: 0)
+        tv.setSelectedRange(range)
+        tv.scrollRangeToVisible(range)
+        tv.window?.makeFirstResponder(tv)
+    }
+
     // MARK: - Selection
 
     func select(_ range: NSRange) {

@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 /// Pure, side-effect-free editor text transforms used by the editor's key
 /// handling (Tab / Shift-Tab / Return). Each function takes the current text

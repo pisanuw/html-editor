@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 /// Caches one `NSScrollView` (and its `NSTextView`) per document id. Because the
 /// same text view is reused when you switch back to a tab, its built-in undo

@@ -34,6 +34,7 @@ struct EditorView: NSViewRepresentable {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? NSTextView else { return }
         textViewStore.textView = textView
+        context.coordinator.ruler?.diffMarkers = document.lineDiffs
         guard !context.coordinator.isEditing, textView.string != document.htmlText else { return }
         let sel = textView.selectedRange()
         textView.string = document.htmlText
@@ -54,7 +55,7 @@ struct EditorView: NSViewRepresentable {
         let scrollView = NSScrollView()
         scrollView.documentView = textView
         scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
+        scrollView.hasHorizontalScroller = !settingsStore.settings.wordWrap
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
 
@@ -133,9 +134,19 @@ struct EditorView: NSViewRepresentable {
         textView.isGrammarCheckingEnabled = false
         textView.font = .monospacedSystemFont(ofSize: CGFloat(settingsStore.settings.fontSize), weight: .regular)
         textView.textContainerInset = NSSize(width: 6, height: 8)
-        textView.textContainer?.widthTracksTextView = true
+        applyWordWrap(settingsStore.settings.wordWrap, to: textView)
         textView.delegate = coordinator
         return textView
+    }
+
+    private func applyWordWrap(_ wrap: Bool, to textView: NSTextView) {
+        textView.textContainer?.widthTracksTextView = wrap
+        textView.isHorizontallyResizable = !wrap
+        if !wrap {
+            textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                                           height: CGFloat.greatestFiniteMagnitude)
+        }
+        textView.enclosingScrollView?.hasHorizontalScroller = !wrap
     }
 
     private func applyHighlight(to textView: NSTextView) {
@@ -170,10 +181,11 @@ struct EditorView: NSViewRepresentable {
 
         deinit { observers.forEach { NotificationCenter.default.removeObserver($0) } }
 
-        /// Apply the current font size and re-highlight with the active theme.
+        /// Apply the current font size, word wrap, and re-highlight with the active theme.
         func applySettings() {
             guard let tv = textView else { return }
             tv.font = .monospacedSystemFont(ofSize: CGFloat(parent.settingsStore.settings.fontSize), weight: .regular)
+            parent.applyWordWrap(parent.settingsStore.settings.wordWrap, to: tv)
             if let storage = tv.textStorage {
                 let sel = tv.selectedRange()
                 HTMLSyntaxHighlighter.highlight(storage)
@@ -213,6 +225,7 @@ struct EditorView: NSViewRepresentable {
             let newText = tv.string
             isEditing = false
             folder?.recompute()
+            ruler?.diffMarkers = parent.document.lineDiffs
             ruler?.refresh()
             updateAllHighlights(tv)
             DispatchQueue.main.async { [weak self] in

@@ -1,10 +1,12 @@
 import SwiftUI
+import Combine
 
 /// Persists `EditorSettings` to `UserDefaults` and publishes changes. When the
 /// settings change it pushes the active palette into `EditorTheme` so the
 /// highlighter picks up the new colors.
 final class AppSettingsStore: ObservableObject {
     @Published var settings: EditorSettings { didSet { apply() } }
+    @Published var showMinimap: Bool = true
 
     private let key = "HTMLEditor.settings"
 

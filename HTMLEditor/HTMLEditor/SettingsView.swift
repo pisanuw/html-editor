@@ -24,6 +24,9 @@ struct SettingsView: View {
                     .monospacedDigit()
                     .frame(width: 44, alignment: .trailing)
             }
+
+            Toggle("Word wrap", isOn: wordWrapBinding)
+            Toggle("Auto-save (2 s after last edit)", isOn: autoSaveBinding)
         }
         .padding(20)
         .frame(width: 380)
@@ -40,5 +43,13 @@ struct SettingsView: View {
     private var fontBinding: Binding<Double> {
         Binding(get: { store.settings.fontSize },
                 set: { store.settings.fontSize = $0 })
+    }
+    private var wordWrapBinding: Binding<Bool> {
+        Binding(get: { store.settings.wordWrap },
+                set: { store.settings.wordWrap = $0 })
+    }
+    private var autoSaveBinding: Binding<Bool> {
+        Binding(get: { store.settings.autoSave },
+                set: { store.settings.autoSave = $0 })
     }
 }

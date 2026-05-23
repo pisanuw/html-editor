@@ -9,20 +9,31 @@ struct ContentView: View {
     @EnvironmentObject var findState: FindState
     @EnvironmentObject var previewStore: PreviewStore
     @EnvironmentObject var snippetStore: SnippetStore
+    @EnvironmentObject var sidebarStore: FileSidebarStore
+    @EnvironmentObject var settingsStore: AppSettingsStore
 
     var body: some View {
-        VStack(spacing: 0) {
-            TabBarView()
-
-            if findState.isVisible {
-                FindBarView()
+        HStack(spacing: 0) {
+            if sidebarStore.isVisible {
+                FileSidebarView()
+                    .environmentObject(sidebarStore)
+                    .environmentObject(workspace)
+                Divider()
             }
 
-            // Keyed by the active id so the editor's NSTextView is rebuilt for
-            // each tab; `DocumentPane` observes the document so the preview and
-            // status bar track its text and cursor.
-            DocumentPane(document: workspace.activeDocument)
-                .id(workspace.activeID)
+            VStack(spacing: 0) {
+                TabBarView()
+
+                if findState.isVisible {
+                    FindBarView()
+                }
+
+                // Keyed by the active id so the editor's NSTextView is rebuilt for
+                // each tab; `DocumentPane` observes the document so the preview and
+                // status bar track its text and cursor.
+                DocumentPane(document: workspace.activeDocument)
+                    .id(workspace.activeID)
+            }
         }
         .toolbar { toolbarContent }
         .sheet(isPresented: $snippetStore.showingManager) {
@@ -32,6 +43,10 @@ struct ContentView: View {
             FindResultsView()
                 .environmentObject(workspace)
                 .environmentObject(findState)
+                .environmentObject(textViewStore)
+        }
+        .sheet(isPresented: $findState.showGoToLine) {
+            GoToLineView(isPresented: $findState.showGoToLine)
                 .environmentObject(textViewStore)
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
@@ -52,6 +67,11 @@ struct ContentView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
+            Button(action: { sidebarStore.isVisible.toggle() }) {
+                Label("Sidebar", systemImage: "sidebar.left")
+            }
+            .help(sidebarStore.isVisible ? "Hide sidebar" : "Show file sidebar")
+
             Button(action: workspace.newTab) {
                 Label("New", systemImage: "doc")
             }
@@ -132,6 +152,7 @@ struct ContentView: View {
                 }
                 Toggle("Live reload", isOn: $previewStore.liveReload)
                 Toggle("Scroll sync", isOn: $previewStore.scrollSync)
+                Toggle("Minimap", isOn: $settingsStore.showMinimap)
                 Divider()
                 Button("Reload preview") {
                     previewStore.reload(workspace.activeDocument.htmlText)
@@ -161,6 +182,10 @@ struct ContentView: View {
 private struct DocumentPane: View {
     @ObservedObject var document: DocumentModel
     @EnvironmentObject var previewStore: PreviewStore
+    @EnvironmentObject var settingsStore: AppSettingsStore
+
+    @State private var showingValidation = false
+    @State private var validationIssues: [ValidationIssue] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -178,15 +203,31 @@ private struct DocumentPane: View {
                 .background(Color(NSColor.windowBackgroundColor))
                 .overlay(Divider(), alignment: .bottom)
             }
+            BreadcrumbBarView(document: document)
             HSplitView {
-                EditorView(document: document)
-                    .frame(minWidth: 300)
+                HStack(spacing: 0) {
+                    EditorView(document: document)
+                    if settingsStore.showMinimap {
+                        Divider()
+                        MinimapView(document: document)
+                            .frame(width: 80)
+                    }
+                }
+                .frame(minWidth: 300)
                 preview
                     .frame(minWidth: 300)
             }
-            StatusBar(document: document)
+            StatusBar(document: document, onValidate: runValidation)
         }
         .navigationTitle(document.windowTitle)
+        .sheet(isPresented: $showingValidation) {
+            ValidationPanelView(issues: validationIssues, isPresented: $showingValidation)
+        }
+    }
+
+    private func runValidation() {
+        validationIssues = HTMLValidator.validate(document.htmlText)
+        showingValidation = true
     }
 
     /// The preview, constrained to a device width when one is selected
@@ -211,6 +252,7 @@ private struct DocumentPane: View {
 
 private struct StatusBar: View {
     @ObservedObject var document: DocumentModel
+    let onValidate: () -> Void
 
     var body: some View {
         HStack(spacing: 16) {
@@ -219,6 +261,12 @@ private struct StatusBar: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer()
+            Button(action: onValidate) {
+                Label("Validate", systemImage: "checkmark.shield")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless)
+            .help("Validate HTML")
             Text("Ln \(document.cursorLine)  Col \(document.cursorColumn)")
                 .foregroundColor(.secondary)
                 .monospacedDigit()

@@ -9,6 +9,9 @@ final class LineNumberRulerView: NSRulerView {
     weak var foldingController: FoldingController?
     private var foldControls: [(line0: Int, rect: NSRect, folded: Bool)] = []
 
+    /// Diff markers supplied by the EditorView coordinator (updated on every edit).
+    var diffMarkers: [Int: DiffMarker] = [:]
+
     init(textView: NSTextView) {
         self.managedTextView = textView
         super.init(scrollView: textView.enclosingScrollView, orientation: .verticalRuler)
@@ -86,8 +89,11 @@ final class LineNumberRulerView: NSRulerView {
                  height: fragmentRect.height,
                  attributes: attributes)
 
-            // Fold triangle for foldable lines (0-based line index).
+            // Diff bar and fold triangle (0-based line index).
             let line0 = lineNumber - 1
+            if let marker = diffMarkers[line0] {
+                drawDiffBar(marker: marker, atY: lineY, height: fragmentRect.height)
+            }
             if foldableLines.contains(line0) {
                 let folded = foldingController?.isFolded(line: line0) ?? false
                 let rect = drawFoldTriangle(atY: lineY, height: fragmentRect.height, folded: folded)
@@ -113,6 +119,14 @@ final class LineNumberRulerView: NSRulerView {
                      attributes: attributes)
             }
         }
+    }
+
+    /// Draw a 3-pixel colored bar on the left edge: green = added, orange = modified.
+    private func drawDiffBar(marker: DiffMarker, atY y: CGFloat, height: CGFloat) {
+        let color: NSColor = marker == .added ? .systemGreen : .systemOrange
+        let bar = NSRect(x: 0, y: y, width: 3, height: height)
+        color.setFill()
+        bar.fill()
     }
 
     private func draw(number: Int, atY y: CGFloat, height: CGFloat,

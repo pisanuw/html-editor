@@ -12,6 +12,7 @@ final class FindState: ObservableObject {
     @Published var useRegex = false
     @Published var status = ""
     @Published var showingResults = false
+    @Published var showGoToLine = false
 
     var options: FindOptions {
         FindOptions(caseSensitive: caseSensitive, wholeWord: wholeWord, useRegex: useRegex)

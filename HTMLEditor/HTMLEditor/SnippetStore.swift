@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 /// Persists the user's snippet library to `UserDefaults` (as JSON via
 /// `SnippetLibrary`) and publishes changes to SwiftUI. The pure model and codec

@@ -3,6 +3,10 @@ import AppKit
 import UniformTypeIdentifiers
 import Combine
 
+/// Diff status for a single line: added (no counterpart in baseline) or
+/// modified (content differs from baseline at that index).
+enum DiffMarker { case added, modified }
+
 /// A single open document (one editor tab). Owns its text, file association,
 /// cursor position, and the selection to restore when its tab is reactivated.
 class DocumentModel: ObservableObject, Identifiable {
@@ -13,15 +17,31 @@ class DocumentModel: ObservableObject, Identifiable {
     @Published var windowTitle: String = "Untitled"
     @Published var cursorLine: Int = 1
     @Published var cursorColumn: Int = 1
+    @Published var cursorOffset: Int = 0
 
     /// Set when the file changes on disk and differs from the buffer; the UI
     /// shows a reload banner.
     @Published var externalChangePending = false
 
+    /// When true, save automatically 2 s after the last edit (only for files
+    /// that already have a URL — untitled buffers are never auto-saved).
+    @Published var autoSave: Bool = false {
+        didSet { autoSave ? startAutoSave() : cancelAutoSave() }
+    }
+
+    /// The text at the last save/load; used to compute per-line diff markers.
+    private(set) var savedBaseline: String?
+
+    /// Maps 0-based line index to its diff status (added or modified vs saved
+    /// baseline). Empty when no baseline has been established (new document).
+    @Published var lineDiffs: [Int: DiffMarker] = [:]
+
     /// Selection to restore when this document's tab becomes active again.
     var savedSelection: NSRange?
 
     private let watcher = FileWatcher()
+    private var autoSaveCancellable: AnyCancellable?
+    private var diffCancellable: AnyCancellable?
 
     private static let defaultHTML = """
     <!DOCTYPE html>
@@ -40,7 +60,11 @@ class DocumentModel: ObservableObject, Identifiable {
     </html>
     """
 
-    init() {}
+    init() {
+        diffCancellable = $htmlText
+            .dropFirst()
+            .sink { [weak self] _ in self?.updateDiff() }
+    }
 
     /// Create a document bound to an existing file (used by session restore and
     /// drag-and-drop). Returns nil if the file can't be read.
@@ -78,6 +102,8 @@ class DocumentModel: ObservableObject, Identifiable {
         windowTitle = url.lastPathComponent
         savedSelection = nil
         externalChangePending = false
+        savedBaseline = content
+        lineDiffs = [:]
         startWatching()
         return true
     }
@@ -114,6 +140,22 @@ class DocumentModel: ObservableObject, Identifiable {
         let position = TextMetrics.lineColumn(in: string, at: location)
         cursorLine = position.line
         cursorColumn = position.column
+        cursorOffset = location
+    }
+
+    // MARK: - Auto-save
+
+    private func startAutoSave() {
+        autoSaveCancellable = $htmlText
+            .debounce(for: .seconds(2), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, self.autoSave, let url = self.fileURL else { return }
+                self.write(to: url)
+            }
+    }
+
+    private func cancelAutoSave() {
+        autoSaveCancellable = nil
     }
 
     // MARK: - Private
@@ -123,7 +165,26 @@ class DocumentModel: ObservableObject, Identifiable {
         fileURL = url
         windowTitle = url.lastPathComponent
         externalChangePending = false
+        savedBaseline = htmlText
+        lineDiffs = [:]
         startWatching()
+    }
+
+    // MARK: - Diff
+
+    private func updateDiff() {
+        guard let baseline = savedBaseline else { lineDiffs = [:]; return }
+        let currentLines = htmlText.components(separatedBy: "\n")
+        let baselineLines = baseline.components(separatedBy: "\n")
+        var result: [Int: DiffMarker] = [:]
+        for (i, line) in currentLines.enumerated() {
+            if i >= baselineLines.count {
+                result[i] = .added
+            } else if line != baselineLines[i] {
+                result[i] = .modified
+            }
+        }
+        lineDiffs = result
     }
 
     private func startWatching() {

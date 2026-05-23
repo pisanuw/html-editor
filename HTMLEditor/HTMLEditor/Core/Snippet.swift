@@ -39,7 +39,7 @@ struct SnippetLibrary: Codable, Equatable {
             </body>
             </html>
             """),
-            Snippet(name: "Anchor link", trigger: "a", body: #"<a href="#"></a>"#),
+            Snippet(name: "Anchor link", trigger: "a", body: "<a href=\"#\"></a>"),
             Snippet(name: "Image", trigger: "img", body: #"<img src="" alt="">"#),
             Snippet(name: "Table 2×2", trigger: "table", body: """
             <table>

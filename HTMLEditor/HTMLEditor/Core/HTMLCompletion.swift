@@ -43,7 +43,7 @@ enum HTMLCompletion {
         // Tag name: "<" followed only by name characters (no whitespace yet).
         let afterLt = String(segment.dropFirst())
         if !afterLt.contains(where: { $0 == " " || $0 == "\t" || $0 == "\n" }) {
-            if afterLt.allSatisfy(isNameChar) {
+            if afterLt.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == ":" }) {
                 let replace = NSRange(location: ltIndex + 1, length: location - (ltIndex + 1))
                 return .tagName(prefix: afterLt, replace: replace)
             }
