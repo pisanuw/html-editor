@@ -43,18 +43,30 @@ If you ever need to rebuild the Xcode project from nothing:
    then add every `.swift` file in `html-editor/HTMLEditor/HTMLEditor/` **and**
    the `Core/` folder (add it as a folder reference / group).
 
-The source files:
+The source files (app layer):
 
 ```text
-HtmlEditorApp.swift        Workspace.swift          EditorView.swift
-ContentView.swift          DocumentModel.swift      LineNumberRulerView.swift
-TabBarView.swift           TextViewStore.swift      PreviewView.swift
-FindBar.swift              HTMLSyntaxHighlighter.swift
-EditorTheme.swift          ExportActions.swift
+HtmlEditorApp.swift        Workspace.swift            EditorView.swift
+ContentView.swift          DocumentModel.swift        EditorCache.swift
+TabBarView.swift           TextViewStore.swift        FoldingController.swift
+FindBar.swift              GoToLineView.swift         FileWatcher.swift
+HTMLSyntaxHighlighter.swift EditorTheme.swift         AppSettingsStore.swift
+LineNumberRulerView.swift  BreadcrumbBarView.swift    MinimapView.swift
+PreviewView.swift          ExportActions.swift        SettingsView.swift
+FindResultsView.swift      FileSidebarView.swift      ValidationPanelView.swift
+SnippetStore.swift         SnippetsView.swift
+```
 
-Core/
-  SyntaxTokenizer.swift  TextEditingOps.swift  FindEngine.swift
-  HTMLFormatter.swift    HTMLExporter.swift    TextMetrics.swift
+Core/ (pure Foundation logic, unit-tested via SwiftPM):
+
+```text
+SyntaxTokenizer.swift   TextEditingOps.swift   FindEngine.swift
+HTMLFormatter.swift     HTMLExporter.swift     HTMLToMarkdown.swift
+HTMLValidator.swift     HTMLBreadcrumb.swift   TextMetrics.swift
+EmmetExpander.swift     TagEditing.swift       MultiCursor.swift
+HTMLCompletion.swift    CodeStructure.swift    FoldingModel.swift
+MultiFileSearch.swift   PreviewWidth.swift     EditorSettings.swift
+ThemePalette.swift      SessionState.swift     Snippet.swift
 ```
 
 ## WebKit framework

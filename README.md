@@ -209,8 +209,7 @@ html-editor/
     ├── CodeStructureTests.swift
     ├── FoldingAndSearchTests.swift
     ├── CustomizationAndSessionTests.swift
-    ├── SnippetTests.swift
-    └── TextMetricsTests.swift
+    └── SnippetTests.swift
 ```
 
 Everything in `Core/` imports only `Foundation`, has no UI dependencies, and is
