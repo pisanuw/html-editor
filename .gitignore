@@ -1,0 +1,23 @@
+# Swift / Swift Package Manager
+.build/
+.swiftpm/
+
+# macOS app bundles
+*.app/
+
+# Xcode DerivedData
+DerivedData/
+*.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# AI session logs
+AI-log.md
+
+# Environment files
+.env
+.env.*
+!.env.example
