@@ -11,7 +11,7 @@ final class TagEditingTests: XCTestCase {
     }
 
     func testAutoCloseWithAttributes() {
-        let text = #"<a href="#">"#                 // length 12
+        let text = ##"<a href="#">"##               // length 12
         let result = TagEditing.autoClose(in: text, caretAfterBracket: (text as NSString).length)
         XCTAssertEqual(result?.closing, "</a>")
     }

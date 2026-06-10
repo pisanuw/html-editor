@@ -1,5 +1,7 @@
 # HTML Editor
 
+[![CI](https://github.com/pisanuw/html-editor/actions/workflows/ci.yml/badge.svg)](https://github.com/pisanuw/html-editor/actions/workflows/ci.yml)
+
 A lightweight macOS HTML editor built with **SwiftUI**, **AppKit**, and **WebKit**.
 It pairs a syntax-highlighted, multi-tab code editor with a live, dark-mode-aware
 preview in a single split-view window.

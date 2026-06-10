@@ -28,8 +28,8 @@ final class EmmetExpanderTests: XCTestCase {
     }
 
     func testAttributesAndText() {
-        XCTAssertEqual(expand(#"a[href="#" target=_blank]{Click}"#),
-                       #"<a href="#" target="_blank">Click</a>"#)
+        XCTAssertEqual(expand(##"a[href="#" target=_blank]{Click}"##),
+                       ##"<a href="#" target="_blank">Click</a>"##)
     }
 
     func testBareAttributeWithoutValue() {

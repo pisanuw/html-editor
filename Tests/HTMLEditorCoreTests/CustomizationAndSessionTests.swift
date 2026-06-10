@@ -13,7 +13,7 @@ final class CustomizationAndSessionTests: XCTestCase {
     }
 
     func testSettingsSanitizeClamps() {
-        let raw = EditorSettings(indentWidth: 100, fontSize: 2, themeName: "Bogus")
+        let raw = EditorSettings(indentWidth: 100, fontSize: 2, themeName: "Bogus", wordWrap: true, autoSave: false)
         let s = raw.sanitized
         XCTAssertEqual(s.indentWidth, 8)
         XCTAssertEqual(s.fontSize, 9)
@@ -21,7 +21,7 @@ final class CustomizationAndSessionTests: XCTestCase {
     }
 
     func testSettingsRoundTrip() {
-        let s = EditorSettings(indentWidth: 4, fontSize: 15, themeName: "Midnight")
+        let s = EditorSettings(indentWidth: 4, fontSize: 15, themeName: "Midnight", wordWrap: false, autoSave: true)
         XCTAssertEqual(EditorSettings.decoded(from: s.encoded()!), s)
     }
 
