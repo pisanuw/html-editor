@@ -32,6 +32,8 @@ jobs:
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           name: coverage-lcov
           path: coverage.lcov
