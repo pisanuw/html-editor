@@ -28,5 +28,5 @@ Scope is optional but encouraged: `feat(emmet):`, `fix(folding):`, `chore(ci):`.
 
 - `HTMLEditor/HTMLEditor/Core/` — pure Foundation logic, unit-tested via `swift test`
 - `HTMLEditor/HTMLEditor/` — AppKit/SwiftUI shell (not testable without a display)
-- `Tests/HTMLEditorCoreTests/` — XCTest suite (191 tests)
+- `Tests/HTMLEditorCoreTests/` — XCTest suite (203 tests)
 - `Package.swift` — SwiftPM package for Core + tests only

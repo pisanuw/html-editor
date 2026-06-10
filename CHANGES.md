@@ -8,3 +8,5 @@
 2026-06-10 [code] audit-ci-gates: created .github/workflows/ci.yml (swift build + swift test on macos-latest); fixed 3 pre-existing test compilation failures; 191 tests green on first CI run
 
 2026-06-10 [doc] audit-history-and-presentation: fixed README duplicate entry, updated SETUP.md file lists, added CLAUDE.md with commit convention, added .githooks/commit-msg Conventional Commits hook, set GitHub description and topics
+
+2026-06-10 [code] report fixes: removed HTMLEditor/.DS_Store, added TextMetrics.offset(ofLine:in:), IDKeyedStore<V>, 12 new tests (203 total), CI pinned to macos-14 with coverage
