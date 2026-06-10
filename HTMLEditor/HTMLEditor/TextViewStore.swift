@@ -45,15 +45,8 @@ class TextViewStore: ObservableObject {
 
     func goToLine(_ line: Int) {
         guard let tv = textView, line >= 1 else { return }
-        let text = tv.string as NSString
-        var currentLine = 1
-        var charIndex = 0
-        while charIndex < text.length {
-            if currentLine == line { break }
-            if text.character(at: charIndex) == 10 { currentLine += 1 }
-            charIndex += 1
-        }
-        let range = NSRange(location: min(charIndex, text.length), length: 0)
+        let offset = TextMetrics.offset(ofLine: line, in: tv.string)
+        let range = NSRange(location: offset, length: 0)
         tv.setSelectedRange(range)
         tv.scrollRangeToVisible(range)
         tv.window?.makeFirstResponder(tv)

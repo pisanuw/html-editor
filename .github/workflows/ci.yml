@@ -9,7 +9,7 @@ on:
 jobs:
   build-and-test:
     name: Build & Test
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
       - uses: actions/checkout@v4
@@ -19,5 +19,19 @@ jobs:
       - name: Build
         run: swift build
 
-      - name: Test
-        run: swift test
+      - name: Test with coverage
+        run: swift test --enable-code-coverage
+
+      - name: Export coverage report
+        run: |
+          xcrun llvm-cov export \
+            .build/debug/HTMLEditorCorePackageTests.xctest/Contents/MacOS/HTMLEditorCorePackageTests \
+            --instr-profile .build/debug/codecov/default.profdata \
+            --format lcov \
+            > coverage.lcov
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage.lcov

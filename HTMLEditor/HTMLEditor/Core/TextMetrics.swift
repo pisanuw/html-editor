@@ -22,6 +22,21 @@ enum TextMetrics {
         return (line, end - lineStart + 1)
     }
 
+    /// UTF-16 offset of the first character on 1-based `line` within `string`.
+    /// Returns the string length when `line` exceeds the line count.
+    static func offset(ofLine line: Int, in string: String) -> Int {
+        guard line >= 1 else { return 0 }
+        let ns = string as NSString
+        var currentLine = 1
+        var i = 0
+        while i < ns.length {
+            if currentLine == line { break }
+            if ns.character(at: i) == 10 { currentLine += 1 }
+            i += 1
+        }
+        return min(i, ns.length)
+    }
+
     /// Total number of lines in `string` (a trailing newline does not add an
     /// extra empty line for display purposes).
     static func lineCount(in string: String) -> Int {

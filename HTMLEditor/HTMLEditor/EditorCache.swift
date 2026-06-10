@@ -5,8 +5,8 @@ import Combine
 /// same text view is reused when you switch back to a tab, its built-in undo
 /// stack and text storage survive tab switches instead of being rebuilt.
 final class EditorCache: ObservableObject {
-    private var views: [UUID: NSScrollView] = [:]
-    private var folders: [UUID: FoldingController] = [:]
+    private var views = IDKeyedStore<NSScrollView>()
+    private var folders = IDKeyedStore<FoldingController>()
 
     init() {
         NotificationCenter.default.addObserver(
@@ -15,15 +15,15 @@ final class EditorCache: ObservableObject {
         }
     }
 
-    func scrollView(for id: UUID) -> NSScrollView? { views[id] }
-    func store(_ view: NSScrollView, for id: UUID) { views[id] = view }
+    func scrollView(for id: UUID) -> NSScrollView? { views.value(for: id) }
+    func store(_ view: NSScrollView, for id: UUID) { views.store(view, for: id) }
 
-    func foldingController(for id: UUID) -> FoldingController? { folders[id] }
-    func store(_ controller: FoldingController, for id: UUID) { folders[id] = controller }
+    func foldingController(for id: UUID) -> FoldingController? { folders.value(for: id) }
+    func store(_ controller: FoldingController, for id: UUID) { folders.store(controller, for: id) }
 
     func discard(_ id: UUID) {
-        views[id] = nil
-        folders[id] = nil
+        views.discard(id)
+        folders.discard(id)
     }
 }
 

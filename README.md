@@ -193,7 +193,8 @@ html-editor/
 │           ├── EditorSettings.swift    # Indent / font / theme settings model
 │           ├── ThemePalette.swift      # Named color palettes + hex parsing
 │           ├── SessionState.swift      # Open-tab session + recent-files models
-│           └── Snippet.swift           # Snippet model + library codec
+│           ├── Snippet.swift           # Snippet model + library codec
+│           └── IDKeyedStore.swift      # Generic UUID-keyed store (backs EditorCache)
 └── Tests/HTMLEditorCoreTests/          # XCTest suite for everything in Core/
     ├── SyntaxTokenizerTests.swift
     ├── TextEditingOpsTests.swift
@@ -209,14 +210,18 @@ html-editor/
     ├── CodeStructureTests.swift
     ├── FoldingAndSearchTests.swift
     ├── CustomizationAndSessionTests.swift
-    └── SnippetTests.swift
+    ├── SnippetTests.swift
+    └── IDKeyedStoreTests.swift
 ```
 
 Everything in `Core/` imports only `Foundation`, has no UI dependencies, and is
 covered by tests. The AppKit/SwiftUI layer is a thin shell that wires those
-functions to the editor. The same `Core/` sources are compiled both by the app
-target and by the `HTMLEditorCore` package library, so the tests validate exactly
-the code the app runs.
+functions to the editor.
+
+`Package.swift` declares an `HTMLEditorCore` library target whose `path` points
+directly at `HTMLEditor/HTMLEditor/Core/` — the same directory the Xcode app
+target compiles via synchronized file groups. There is exactly one copy of every
+Core source file; `swift test` builds and tests it without Xcode or a display.
 
 ## Requirements
 
