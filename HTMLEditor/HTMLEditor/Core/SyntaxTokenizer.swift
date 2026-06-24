@@ -43,8 +43,7 @@ enum SyntaxTokenizer {
     /// the whole match (used for CSS values).
     private struct Rule {
         let type: TokenType
-        let pattern: String
-        let options: NSRegularExpression.Options
+        let regex: NSRegularExpression?
         let captureGroup: Int
 
         init(_ type: TokenType,
@@ -52,9 +51,22 @@ enum SyntaxTokenizer {
              options: NSRegularExpression.Options = [],
              captureGroup: Int = 0) {
             self.type = type
-            self.pattern = pattern
-            self.options = options
             self.captureGroup = captureGroup
+            self.regex = Rule.compile(pattern, options)
+        }
+
+        /// Compile a rule's pattern once, when the static rule tables are built.
+        /// These patterns are compile-time constants, so a failure is an
+        /// authoring bug, not a runtime condition: trap it in debug/CI rather
+        /// than silently emitting no tokens. In release, the rule is skipped so
+        /// coloring degrades instead of crashing.
+        private static func compile(_ pattern: String,
+                                    _ options: NSRegularExpression.Options) -> NSRegularExpression? {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: options) {
+                return regex
+            }
+            assertionFailure("Invalid static syntax-highlighting pattern: \(pattern)")
+            return nil
         }
     }
 
@@ -138,9 +150,7 @@ enum SyntaxTokenizer {
                                 text: String,
                                 within region: NSRange) {
         for rule in rules {
-            guard let regex = try? NSRegularExpression(pattern: rule.pattern,
-                                                       options: rule.options)
-            else { continue }
+            guard let regex = rule.regex else { continue }
             let matches = regex.matches(in: text, range: region)
             for match in matches {
                 let r = match.range(at: rule.captureGroup)
@@ -167,7 +177,10 @@ enum SyntaxTokenizer {
         let pattern = "<\(tagName)\\b[^>]*>([\\s\\S]*?)</\(tagName)>"
         guard let regex = try? NSRegularExpression(pattern: pattern,
                                                    options: .caseInsensitive)
-        else { return [] }
+        else {
+            assertionFailure("Invalid embedded-region pattern for <\(tagName)>")
+            return []
+        }
         let ns = text as NSString
         let full = NSRange(location: 0, length: ns.length)
         return regex.matches(in: text, range: full).compactMap { match in
@@ -181,6 +194,9 @@ private extension IndexSet {
     /// True if any integer in `range` is already present in the set.
     func intersects(integersIn range: Range<Int>) -> Bool {
         guard !range.isEmpty else { return false }
+        // IndexSet has no `isDisjoint(with:)`, so the suggested rewrite does not
+        // apply here.
+        // swiftlint:disable:next is_disjoint
         return !self.intersection(IndexSet(integersIn: range)).isEmpty
     }
 }

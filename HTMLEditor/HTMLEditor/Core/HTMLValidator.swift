@@ -22,8 +22,8 @@ enum HTMLValidator {
 
         while i < ns.length {
             let c = ns.character(at: i)
-            if c == 10 { lineNumber += 1; i += 1; continue }
-            guard c == 60 else { i += 1; continue } // '<'
+            if c == ASCII.newline { lineNumber += 1; i += 1; continue }
+            guard c == ASCII.lessThan else { i += 1; continue }
 
             let tagLine = lineNumber
             i += 1
@@ -31,7 +31,7 @@ enum HTMLValidator {
             let next = ns.character(at: i)
 
             // Closing tag </tag>
-            if next == 47 {
+            if next == ASCII.slash {
                 i += 1
                 let name = readTagName(ns, from: &i)
                 skipToClose(ns, from: &i)
@@ -53,7 +53,7 @@ enum HTMLValidator {
             }
 
             // Comment or doctype — skip to '>'
-            if next == 33 || next == 63 { skipToClose(ns, from: &i); continue }
+            if next == ASCII.bang || next == ASCII.question { skipToClose(ns, from: &i); continue }
 
             let name = readTagName(ns, from: &i)
             guard !name.isEmpty else { i += 1; continue }
@@ -97,19 +97,28 @@ enum HTMLValidator {
         var buf = ""
         while i < ns.length {
             let c = ns.character(at: i)
-            guard (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57)
-                    || c == 45 || c == 95 || c == 58 else { break }
+            guard isTagNameCharacter(c) else { break }
             buf.unicodeScalars.append(Unicode.Scalar(c)!)
             i += 1
         }
         return buf.lowercased()
     }
 
+    /// HTML tag/attribute names are ASCII letters, digits, `-`, `_`, or `:`.
+    private static func isTagNameCharacter(_ c: unichar) -> Bool {
+        (c >= ASCII.upperA && c <= ASCII.upperZ)
+            || (c >= ASCII.lowerA && c <= ASCII.lowerZ)
+            || (c >= ASCII.digitZero && c <= ASCII.digitNine)
+            || c == ASCII.hyphen
+            || c == ASCII.underscore
+            || c == ASCII.colon
+    }
+
     /// Scan past attributes, recording which attribute names are present.
     private static func readAttributeNames(_ ns: NSString, from i: inout Int,
                                            into attrs: inout [String: Bool],
                                            selfClose: inout Bool) {
-        var inQuote: unichar? = nil
+        var inQuote: unichar?
         var key = ""
 
         while i < ns.length {
@@ -118,18 +127,18 @@ enum HTMLValidator {
                 if c == q { inQuote = nil }
                 i += 1; continue
             }
-            if c == 62 { // >
+            if c == ASCII.greaterThan {
                 if !key.isEmpty { attrs[key] = true }
-                selfClose = i > 0 && ns.character(at: i - 1) == 47
+                selfClose = i > 0 && ns.character(at: i - 1) == ASCII.slash
                 i += 1; return
             }
-            if c == 47 { i += 1; continue } // trailing slash before >
-            if c == 34 || c == 39 { inQuote = c; i += 1; continue }
-            if c == 61 { // = means value follows; key is complete
+            if c == ASCII.slash { i += 1; continue } // trailing slash before >
+            if c == ASCII.doubleQuote || c == ASCII.singleQuote { inQuote = c; i += 1; continue }
+            if c == ASCII.equals { // value follows; key is complete
                 if !key.isEmpty { attrs[key] = true; key = "" }
                 i += 1; continue
             }
-            if c == 32 || c == 9 || c == 10 || c == 13 {
+            if c == ASCII.space || c == ASCII.tab || c == ASCII.newline || c == ASCII.carriageReturn {
                 if !key.isEmpty { attrs[key] = true; key = "" }
                 i += 1; continue
             }
@@ -140,7 +149,33 @@ enum HTMLValidator {
     }
 
     private static func skipToClose(_ ns: NSString, from i: inout Int) {
-        while i < ns.length { let c = ns.character(at: i); i += 1; if c == 62 { return } }
+        while i < ns.length { let c = ns.character(at: i); i += 1; if c == ASCII.greaterThan { return } }
+    }
+
+    /// Named ASCII code points used by the byte-level scanner above, so the
+    /// comparison sites read as characters rather than bare magic numbers.
+    private enum ASCII {
+        static let tab = unichar(UInt8(ascii: "\t"))
+        static let newline = unichar(UInt8(ascii: "\n"))
+        static let carriageReturn = unichar(UInt8(ascii: "\r"))
+        static let space = unichar(UInt8(ascii: " "))
+        static let bang = unichar(UInt8(ascii: "!"))
+        static let doubleQuote = unichar(UInt8(ascii: "\""))
+        static let singleQuote = unichar(UInt8(ascii: "'"))
+        static let hyphen = unichar(UInt8(ascii: "-"))
+        static let slash = unichar(UInt8(ascii: "/"))
+        static let colon = unichar(UInt8(ascii: ":"))
+        static let lessThan = unichar(UInt8(ascii: "<"))
+        static let equals = unichar(UInt8(ascii: "="))
+        static let greaterThan = unichar(UInt8(ascii: ">"))
+        static let question = unichar(UInt8(ascii: "?"))
+        static let underscore = unichar(UInt8(ascii: "_"))
+        static let digitZero = unichar(UInt8(ascii: "0"))
+        static let digitNine = unichar(UInt8(ascii: "9"))
+        static let upperA = unichar(UInt8(ascii: "A"))
+        static let upperZ = unichar(UInt8(ascii: "Z"))
+        static let lowerA = unichar(UInt8(ascii: "a"))
+        static let lowerZ = unichar(UInt8(ascii: "z"))
     }
 
     private static let voidElements: Set<String> = [

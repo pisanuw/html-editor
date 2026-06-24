@@ -26,7 +26,7 @@ enum TagEditing {
 
         // Walk back to the matching '<', honoring quotes, with no nested '<'.
         var i = caret - 2
-        var quote: unichar? = nil
+        var quote: unichar?
         var ltIndex = -1
         while i >= 0 {
             let c = ns.character(at: i)
@@ -62,8 +62,7 @@ enum TagEditing {
         if inner.hasSuffix("/") { return nil } // self-closing
         var name = ""
         for c in inner {
-            if c.isLetter || c.isNumber || c == "-" || c == "_" || c == ":" { name.append(c) }
-            else { break }
+            if c.isLetter || c.isNumber || c == "-" || c == "_" || c == ":" { name.append(c) } else { break }
         }
         return name.isEmpty ? nil : name
     }
@@ -84,7 +83,9 @@ enum TagEditing {
     /// self-closing/void tags or when no partner exists.
     static func matchingTagNameRanges(in text: String, caret: Int) -> (NSRange, NSRange)? {
         let tokens = scanTags(text)
-        guard let here = tokens.firstIndex(where: { NSLocationInRange(caret, $0.range) || caret == $0.range.location + $0.range.length }) else {
+        guard let here = tokens.firstIndex(where: {
+            NSLocationInRange(caret, $0.range) || caret == $0.range.location + $0.range.length
+        }) else {
             return nil
         }
         let token = tokens[here]
@@ -107,8 +108,7 @@ enum TagEditing {
         while j < tokens.count {
             let t = tokens[j]
             if t.name == name {
-                if t.kind == .open { depth += 1 }
-                else if t.kind == .close {
+                if t.kind == .open { depth += 1 } else if t.kind == .close {
                     if depth == 0 { return j }
                     depth -= 1
                 }
@@ -125,8 +125,7 @@ enum TagEditing {
         while j >= 0 {
             let t = tokens[j]
             if t.name == name {
-                if t.kind == .close { depth += 1 }
-                else if t.kind == .open {
+                if t.kind == .close { depth += 1 } else if t.kind == .open {
                     if depth == 0 { return j }
                     depth -= 1
                 }
@@ -176,7 +175,7 @@ enum TagEditing {
     /// quotes. Returns `nil` if unterminated.
     private static func indexAfterTagEnd(_ ns: NSString, from start: Int) -> Int? {
         var i = start + 1
-        var quote: unichar? = nil
+        var quote: unichar?
         while i < ns.length {
             let c = ns.character(at: i)
             if let q = quote {
@@ -199,8 +198,7 @@ enum TagEditing {
 
         var name = ""
         for c in body {
-            if c.isLetter || c.isNumber || c == "-" || c == "_" || c == ":" { name.append(c) }
-            else { break }
+            if c.isLetter || c.isNumber || c == "-" || c == "_" || c == ":" { name.append(c) } else { break }
         }
         guard !name.isEmpty else { return nil }
 
@@ -209,10 +207,15 @@ enum TagEditing {
         let nameRange = NSRange(location: nameStart, length: (name as NSString).length)
 
         let kind: Kind
-        if isClose { kind = .close }
-        else if isSelf { kind = .selfClose }
-        else if voidTags.contains(name.lowercased()) { kind = .voidEl }
-        else { kind = .open }
+        if isClose {
+            kind = .close
+        } else if isSelf {
+            kind = .selfClose
+        } else if voidTags.contains(name.lowercased()) {
+            kind = .voidEl
+        } else {
+            kind = .open
+        }
 
         return TagToken(range: whole, nameRange: nameRange, name: name, kind: kind)
     }
