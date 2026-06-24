@@ -127,15 +127,15 @@ private extension NSColor {
         var value: UInt64 = 0
         guard Scanner(string: s).scanHexInt64(&value) else { return nil }
         if s.count == 6 {
-            self.init(srgbRed:   CGFloat((value >> 16) & 0xFF) / 255,
-                      green: CGFloat((value >>  8) & 0xFF) / 255,
-                      blue:  CGFloat( value        & 0xFF) / 255,
+            self.init(srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
+                      green: CGFloat((value >> 8) & 0xFF) / 255,
+                      blue: CGFloat( value & 0xFF) / 255,
                       alpha: 1)
         } else {
-            self.init(srgbRed:   CGFloat((value >> 24) & 0xFF) / 255,
+            self.init(srgbRed: CGFloat((value >> 24) & 0xFF) / 255,
                       green: CGFloat((value >> 16) & 0xFF) / 255,
-                      blue:  CGFloat((value >>  8) & 0xFF) / 255,
-                      alpha: CGFloat( value        & 0xFF) / 255)
+                      blue: CGFloat((value >> 8) & 0xFF) / 255,
+                      alpha: CGFloat( value & 0xFF) / 255)
         }
     }
 

@@ -5,12 +5,6 @@ struct FindOptions: Equatable {
     var caseSensitive = false
     var wholeWord = false
     var useRegex = false
-
-    init(caseSensitive: Bool = false, wholeWord: Bool = false, useRegex: Bool = false) {
-        self.caseSensitive = caseSensitive
-        self.wholeWord = wholeWord
-        self.useRegex = useRegex
-    }
 }
 
 /// Pure find/replace logic shared by the find bar UI. Returns UTF-16 `NSRange`

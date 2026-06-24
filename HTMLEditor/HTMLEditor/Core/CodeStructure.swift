@@ -35,8 +35,7 @@ enum CodeStructure {
         var j = start
         while j < ns.length {
             let c = ns.character(at: j)
-            if c == open { depth += 1 }
-            else if c == close { depth -= 1; if depth == 0 { return j } }
+            if c == open { depth += 1 } else if c == close { depth -= 1; if depth == 0 { return j } }
             j += 1
         }
         return nil
@@ -47,8 +46,7 @@ enum CodeStructure {
         var j = start
         while j >= 0 {
             let c = ns.character(at: j)
-            if c == close { depth += 1 }
-            else if c == open { depth -= 1; if depth == 0 { return j } }
+            if c == close { depth += 1 } else if c == open { depth -= 1; if depth == 0 { return j } }
             j -= 1
         }
         return nil

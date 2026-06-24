@@ -79,8 +79,7 @@ enum TextEditingOps {
         var removedAfterFirst = 0
         let rebuilt = mapLines(block) { line in
             let removed = leadingWhitespaceToRemove(line, max: width)
-            if isFirstLine { firstLineRemoved = removed; isFirstLine = false }
-            else { removedAfterFirst += removed }
+            if isFirstLine { firstLineRemoved = removed; isFirstLine = false } else { removedAfterFirst += removed }
             return String(line.dropFirst(removed))
         }
         let newLoc = max(lineRange.location, selection.location - firstLineRemoved)

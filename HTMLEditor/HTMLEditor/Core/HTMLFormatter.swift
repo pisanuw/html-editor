@@ -113,7 +113,7 @@ enum HTMLFormatter {
     /// `start`, skipping over quoted attribute values.
     private static func endOfTag(_ chars: [Character], from start: Int) -> Int {
         var i = start + 1
-        var quote: Character? = nil
+        var quote: Character?
         while i < chars.count {
             let c = chars[i]
             if let q = quote {

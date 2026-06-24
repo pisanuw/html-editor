@@ -21,8 +21,6 @@ struct Snippet: Codable, Identifiable, Equatable {
 struct SnippetLibrary: Codable, Equatable {
     var snippets: [Snippet]
 
-    init(snippets: [Snippet]) { self.snippets = snippets }
-
     /// Starter snippets shown the first time the library is used.
     static var defaults: SnippetLibrary {
         SnippetLibrary(snippets: [

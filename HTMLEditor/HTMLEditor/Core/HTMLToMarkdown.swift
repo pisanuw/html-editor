@@ -91,8 +91,7 @@ enum HTMLToMarkdown {
             var name = ""
             while i < chars.count {
                 let c = chars[i]
-                if c.isLetter || c.isNumber || c == "-" || c == "_" || c == ":" { name.append(c); i += 1 }
-                else { break }
+                if c.isLetter || c.isNumber || c == "-" || c == "_" || c == ":" { name.append(c); i += 1 } else { break }
             }
             return name
         }

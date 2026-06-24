@@ -74,7 +74,7 @@ enum HTMLBreadcrumb {
 
     /// Skip whitespace, attribute key=value pairs, until '>' or '/>' or end.
     private static func skipPastAttributes(_ ns: NSString, from i: inout Int, limit: Int) {
-        var inQuote: unichar? = nil
+        var inQuote: unichar?
         while i < limit {
             let c = ns.character(at: i)
             if let q = inQuote {

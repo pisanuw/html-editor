@@ -19,7 +19,7 @@ enum HTMLCompletion {
 
         // Find the nearest unmatched '<' before the caret (quote-aware).
         var i = location - 1
-        var quote: unichar? = nil
+        var quote: unichar?
         var ltIndex = -1
         while i >= 0 {
             let c = ns.character(at: i)

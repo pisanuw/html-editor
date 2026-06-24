@@ -69,9 +69,9 @@ struct AppCommands: Commands {
     var body: some Commands {
         // File menu.
         CommandGroup(replacing: .newItem) {
-            Button("New Tab")  { workspace?.newTab() }.keyboardShortcut("t")
-            Button("New")      { workspace?.newTab() }.keyboardShortcut("n")
-            Button("Open…")    { workspace?.openInNewTab() }.keyboardShortcut("o")
+            Button("New Tab") { workspace?.newTab() }.keyboardShortcut("t")
+            Button("New") { workspace?.newTab() }.keyboardShortcut("n")
+            Button("Open…") { workspace?.openInNewTab() }.keyboardShortcut("o")
             Menu("Open Recent") {
                 ForEach(workspace?.recentURLs ?? [], id: \.self) { url in
                     Button(url.lastPathComponent) { workspace?.open(url: url) }
@@ -82,7 +82,7 @@ struct AppCommands: Commands {
             Button("Reopen Closed Tab") { workspace?.reopenLastClosed() }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
             Divider()
-            Button("Save")     { workspace?.saveActive() }.keyboardShortcut("s")
+            Button("Save") { workspace?.saveActive() }.keyboardShortcut("s")
             Button("Save As…") { workspace?.saveActiveAs() }
                 .keyboardShortcut("s", modifiers: [.command, .shift])
             Divider()
