@@ -203,6 +203,19 @@ private struct DocumentPane: View {
                 .background(Color(NSColor.windowBackgroundColor))
                 .overlay(Divider(), alignment: .bottom)
             }
+            if let message = document.fileError {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.octagon.fill")
+                        .foregroundColor(.red)
+                    Text(message)
+                    Spacer()
+                    Button("Dismiss") { document.fileError = nil }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color(NSColor.windowBackgroundColor))
+                .overlay(Divider(), alignment: .bottom)
+            }
             BreadcrumbBarView(document: document)
             HSplitView {
                 HStack(spacing: 0) {

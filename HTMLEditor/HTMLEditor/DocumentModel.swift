@@ -23,6 +23,12 @@ class DocumentModel: ObservableObject, Identifiable {
     /// shows a reload banner.
     @Published var externalChangePending = false
 
+    /// Set when a save or reload fails; the UI shows an error banner. Cleared
+    /// on the next successful save/reload. A non-nil value means the on-disk
+    /// file may not reflect the buffer, so the user must not assume their work
+    /// is persisted.
+    @Published var fileError: String?
+
     /// When true, save automatically 2 s after the last edit (only for files
     /// that already have a URL — untitled buffers are never auto-saved).
     @Published var autoSave: Bool = false {
@@ -126,10 +132,14 @@ class DocumentModel: ObservableObject, Identifiable {
 
     /// Reload the buffer from the file on disk (discards unsaved edits).
     func reloadFromDisk() {
-        guard let url = fileURL,
-              let content = try? String(contentsOf: url, encoding: .utf8) else { return }
-        htmlText = content
-        externalChangePending = false
+        guard let url = fileURL else { return }
+        do {
+            htmlText = try String(contentsOf: url, encoding: .utf8)
+            externalChangePending = false
+            fileError = nil
+        } catch {
+            fileError = "Could not reload \(url.lastPathComponent): \(error.localizedDescription)"
+        }
     }
 
     func ignoreExternalChange() {
@@ -150,7 +160,12 @@ class DocumentModel: ObservableObject, Identifiable {
             .debounce(for: .seconds(2), scheduler: RunLoop.main)
             .sink { [weak self] _ in
                 guard let self, self.autoSave, let url = self.fileURL else { return }
-                self.write(to: url)
+                if !self.write(to: url) {
+                    // A failed write would otherwise repeat on every keystroke,
+                    // beeping endlessly. Stop auto-saving and leave the error
+                    // banner up so the user can resolve it and save manually.
+                    self.autoSave = false
+                }
             }
     }
 
@@ -160,14 +175,27 @@ class DocumentModel: ObservableObject, Identifiable {
 
     // MARK: - Private
 
-    private func write(to url: URL) {
-        try? htmlText.write(to: url, atomically: true, encoding: .utf8)
-        fileURL = url
-        windowTitle = url.lastPathComponent
-        externalChangePending = false
-        savedBaseline = htmlText
-        lineDiffs = [:]
-        startWatching()
+    /// Persist the buffer to `url`. Returns whether the write succeeded. The
+    /// dirty/diff baseline is advanced *only* on success, so a failed write
+    /// keeps the document marked dirty instead of silently discarding the user's
+    /// changes.
+    @discardableResult
+    private func write(to url: URL) -> Bool {
+        switch DocumentSaver.save(htmlText, to: url) {
+        case .saved(let baseline):
+            fileError = nil
+            fileURL = url
+            windowTitle = url.lastPathComponent
+            externalChangePending = false
+            savedBaseline = baseline
+            lineDiffs = [:]
+            startWatching()
+            return true
+        case .failed(let message):
+            fileError = "Could not save \(url.lastPathComponent): \(message)"
+            NSSound.beep()
+            return false
+        }
     }
 
     // MARK: - Diff

@@ -31,9 +31,9 @@ enum ExportActions {
         webView.createPDF(configuration: WKPDFConfiguration()) { result in
             switch result {
             case .success(let data):
-                try? data.write(to: url)
-            case .failure:
-                NSSound.beep()
+                write(data, to: url)
+            case .failure(let error):
+                presentError(error, writing: url)
             }
         }
     }
@@ -61,7 +61,7 @@ enum ExportActions {
                   let data = rep.representation(using: .png, properties: [:]) else {
                 NSSound.beep(); return
             }
-            try? data.write(to: url)
+            write(data, to: url)
         }
     }
 
@@ -69,7 +69,12 @@ enum ExportActions {
     static func openInBrowser(_ html: String) {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("HTMLEditorPreview.html")
-        try? html.write(to: url, atomically: true, encoding: .utf8)
+        do {
+            try html.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            presentError(error, writing: url)
+            return
+        }
         NSWorkspace.shared.open(url)
     }
 
@@ -89,7 +94,32 @@ enum ExportActions {
         panel.allowedContentTypes = [type]
         panel.nameFieldStringValue = defaultName
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? text.write(to: url, atomically: true, encoding: .utf8)
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            presentError(error, writing: url)
+        }
+    }
+
+    /// Write `data` to `url`, surfacing any failure to the user instead of
+    /// silently dropping the export.
+    private static func write(_ data: Data, to url: URL) {
+        do {
+            try data.write(to: url)
+        } catch {
+            presentError(error, writing: url)
+        }
+    }
+
+    /// Show a modal alert for a failed file write. Export is user-initiated, so
+    /// a silent failure would leave the user believing a file exists when it
+    /// does not.
+    private static func presentError(_ error: Error, writing url: URL) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Could not export \(url.lastPathComponent)"
+        alert.informativeText = error.localizedDescription
+        alert.runModal()
     }
 
     private static func base(for html: String) -> String {
